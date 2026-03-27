@@ -1,5 +1,6 @@
 const productModel = require('../models/product.model');
 const { buildMessageResponse } = require('../views/auth.view');
+const { normalizeImageUrl, validateImageUrl } = require('../utils/image.util');
 const {
   buildCategoriesResponse,
   buildProductMessageResponse,
@@ -7,7 +8,7 @@ const {
   buildProductsResponse,
 } = require('../views/product.view');
 
-function validateProductInput({ nombre, categoria, cantidad, precio }) {
+function validateProductInput({ nombre, categoria, cantidad, precio, imageUrl }) {
   if (!nombre || !categoria || cantidad === undefined || precio === undefined) {
     return 'Nombre, categoria, cantidad y precio son obligatorios';
   }
@@ -18,6 +19,12 @@ function validateProductInput({ nombre, categoria, cantidad, precio }) {
 
   if (Number.isNaN(Number(precio)) || Number(precio) < 0) {
     return 'El precio debe ser un numero igual o mayor a 0';
+  }
+
+  const imageValidationError = validateImageUrl(imageUrl?.trim() || '');
+
+  if (imageValidationError) {
+    return imageValidationError;
   }
 
   return null;
@@ -57,7 +64,16 @@ async function getProductById(req, res, next) {
 
 async function createProduct(req, res, next) {
   try {
-    const validationError = validateProductInput(req.body);
+    const normalizedImage = await normalizeImageUrl(req.body.imageUrl?.trim() || '');
+
+    if (normalizedImage.error) {
+      return res.status(400).json(buildMessageResponse(normalizedImage.error));
+    }
+
+    const validationError = validateProductInput({
+      ...req.body,
+      imageUrl: normalizedImage.imageUrl,
+    });
 
     if (validationError) {
       return res.status(400).json(buildMessageResponse(validationError));
@@ -70,7 +86,7 @@ async function createProduct(req, res, next) {
       cantidad: Number(req.body.cantidad),
       precio: Number(req.body.precio),
       detalle: req.body.detalle?.trim() || '',
-      imageUrl: req.body.imageUrl?.trim() || '',
+      imageUrl: normalizedImage.imageUrl,
     });
 
     return res.status(201).json(buildProductResponse(product, 'Producto creado correctamente'));
@@ -85,7 +101,16 @@ async function createProduct(req, res, next) {
 
 async function updateProduct(req, res, next) {
   try {
-    const validationError = validateProductInput(req.body);
+    const normalizedImage = await normalizeImageUrl(req.body.imageUrl?.trim() || '');
+
+    if (normalizedImage.error) {
+      return res.status(400).json(buildMessageResponse(normalizedImage.error));
+    }
+
+    const validationError = validateProductInput({
+      ...req.body,
+      imageUrl: normalizedImage.imageUrl,
+    });
 
     if (validationError) {
       return res.status(400).json(buildMessageResponse(validationError));
@@ -98,7 +123,7 @@ async function updateProduct(req, res, next) {
       cantidad: Number(req.body.cantidad),
       precio: Number(req.body.precio),
       detalle: req.body.detalle?.trim() || '',
-      imageUrl: req.body.imageUrl?.trim() || '',
+      imageUrl: normalizedImage.imageUrl,
     });
 
     if (!product) {
