@@ -1,0 +1,468 @@
+const pool = require('../config/db');
+const { hashPassword, isBcryptHash, verifyPassword } = require('../utils/hash.util');
+
+class UserModel {
+  async ensureProfileFields() {
+    await pool.query(`
+      ALTER TABLE IF EXISTS usuarios
+      ADD COLUMN IF NOT EXISTS telefono VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS direccion TEXT,
+      ADD COLUMN IF NOT EXISTS avatar_url TEXT
+    `);
+  }
+
+  async ensureBaseRoles() {
+    await pool.query(`
+      INSERT INTO roles (nombre, descripcion)
+      SELECT 'admin', 'Acceso total al sistema'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM roles WHERE LOWER(nombre) = 'admin'
+      )
+    `);
+
+    await pool.query(`
+      INSERT INTO roles (nombre, descripcion)
+      SELECT 'vendedor', 'Puede visualizar productos y operar ventas'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM roles WHERE LOWER(nombre) = 'vendedor'
+      )
+    `);
+  }
+
+  mapPublicUser(user) {
+    return {
+      id: user.id,
+      name: user.nombre,
+      email: user.email,
+      role: user.rol || null,
+      phone: user.telefono || '',
+      address: user.direccion || '',
+      avatarUrl: user.avatar_url || '',
+      active: typeof user.activo === 'boolean' ? user.activo : true,
+    };
+  }
+
+  async findByEmail(email) {
+    const query = `
+      SELECT
+        u.id,
+        u.nombre,
+        u.email,
+        u.telefono,
+        u.direccion,
+        u.avatar_url,
+        u.password,
+        u.activo,
+        r.nombre AS rol
+      FROM usuarios u
+      LEFT JOIN usuario_roles ur ON ur.usuario_id = u.id
+      LEFT JOIN roles r ON r.id = ur.rol_id
+      WHERE LOWER(u.email) = LOWER($1)
+      LIMIT 1
+    `;
+
+    const { rows } = await pool.query(query, [email]);
+
+    return rows[0] || null;
+  }
+
+  async findRoleByName(roleName) {
+    const { rows } = await pool.query(
+      'SELECT id, nombre FROM roles WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
+      [roleName],
+    );
+
+    return rows[0] || null;
+  }
+
+  async findPublicById(id) {
+    const query = `
+      SELECT
+        u.id,
+        u.nombre,
+        u.email,
+        u.telefono,
+        u.direccion,
+        u.avatar_url,
+        u.activo,
+        r.nombre AS rol
+      FROM usuarios u
+      LEFT JOIN usuario_roles ur ON ur.usuario_id = u.id
+      LEFT JOIN roles r ON r.id = ur.rol_id
+      WHERE u.id = $1
+      LIMIT 1
+    `;
+
+    const { rows } = await pool.query(query, [id]);
+    const user = rows[0];
+
+    if (!user || !user.activo) {
+      return null;
+    }
+
+    return this.mapPublicUser(user);
+  }
+
+  async validateCredentials(email, password) {
+    const user = await this.findByEmail(email);
+
+    if (!user || !user.activo) {
+      return null;
+    }
+
+    const isValid = await verifyPassword(password, user.password);
+
+    if (!isValid) {
+      return null;
+    }
+
+    if (!isBcryptHash(user.password)) {
+      const passwordHash = await hashPassword(password);
+
+      await pool.query('UPDATE usuarios SET password = $1 WHERE id = $2', [passwordHash, user.id]);
+    }
+
+    return this.mapPublicUser(user);
+  }
+
+  async createUser({ name, email, passwordHash, roleName, phone, address, avatarUrl }) {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const existingUser = await client.query(
+        'SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1) LIMIT 1',
+        [email],
+      );
+
+      if (existingUser.rows[0]) {
+        await client.query('ROLLBACK');
+        return { error: 'EMAIL_EXISTS' };
+      }
+
+      const roleResult = await client.query(
+        'SELECT id, nombre FROM roles WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
+        [roleName],
+      );
+
+      const role = roleResult.rows[0];
+
+      if (!role) {
+        await client.query('ROLLBACK');
+        return { error: 'ROLE_NOT_FOUND' };
+      }
+
+      const userResult = await client.query(
+        `
+          INSERT INTO usuarios (
+            nombre,
+            email,
+            telefono,
+            direccion,
+            avatar_url,
+            password,
+            activo,
+            fecha_creacion,
+            fecha_actualizacion
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
+          RETURNING id, nombre, email, telefono, direccion, avatar_url
+        `,
+        [
+          name,
+          email.toLowerCase(),
+          phone ? phone.trim() : null,
+          address ? address.trim() : null,
+          avatarUrl ? avatarUrl.trim() : null,
+          passwordHash,
+        ],
+      );
+
+      const user = userResult.rows[0];
+
+      await client.query(
+        'INSERT INTO usuario_roles (usuario_id, rol_id) VALUES ($1, $2)',
+        [user.id, role.id],
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        user: {
+          ...this.mapPublicUser({
+            ...user,
+            rol: role.nombre,
+          }),
+        },
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateProfile({ userId, name, email, phone, address, avatarUrl }) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const existingUser = await client.query(
+        `
+          SELECT id
+          FROM usuarios
+          WHERE LOWER(email) = LOWER($1) AND id <> $2
+          LIMIT 1
+        `,
+        [normalizedEmail, userId],
+      );
+
+      if (existingUser.rows[0]) {
+        await client.query('ROLLBACK');
+        return { error: 'EMAIL_EXISTS' };
+      }
+
+      const result = await client.query(
+        `
+          UPDATE usuarios
+          SET
+            nombre = $1,
+            email = $2,
+            telefono = $3,
+            direccion = $4,
+            avatar_url = $5,
+            fecha_actualizacion = NOW()
+          WHERE id = $6 AND activo = true
+          RETURNING id, nombre, email, telefono, direccion, avatar_url
+        `,
+        [
+          name.trim(),
+          normalizedEmail,
+          phone ? phone.trim() : null,
+          address ? address.trim() : null,
+          avatarUrl ? avatarUrl.trim() : null,
+          userId,
+        ],
+      );
+
+      const user = result.rows[0];
+
+      if (!user) {
+        await client.query('ROLLBACK');
+        return { error: 'USER_NOT_FOUND' };
+      }
+
+      const roleResult = await client.query(
+        `
+          SELECT r.nombre AS rol
+          FROM usuario_roles ur
+          INNER JOIN roles r ON r.id = ur.rol_id
+          WHERE ur.usuario_id = $1
+          LIMIT 1
+        `,
+        [userId],
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        user: this.mapPublicUser({
+          ...user,
+          rol: roleResult.rows[0]?.rol || null,
+        }),
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async changePassword({ userId, currentPassword, newPasswordHash }) {
+    const user = await this.findByIdWithPassword(userId);
+
+    if (!user || !user.activo) {
+      return { error: 'USER_NOT_FOUND' };
+    }
+
+    const isValid = await verifyPassword(currentPassword, user.password);
+
+    if (!isValid) {
+      return { error: 'CURRENT_PASSWORD_INVALID' };
+    }
+
+    await pool.query(
+      `
+        UPDATE usuarios
+        SET password = $1, fecha_actualizacion = NOW()
+        WHERE id = $2
+      `,
+      [newPasswordHash, userId],
+    );
+
+    return { ok: true };
+  }
+
+  async findByIdWithPassword(id) {
+    const { rows } = await pool.query(
+      `
+        SELECT id, password, activo
+        FROM usuarios
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [id],
+    );
+
+    return rows[0] || null;
+  }
+
+  async listUsers() {
+    const { rows } = await pool.query(`
+      SELECT
+        u.id,
+        u.nombre,
+        u.email,
+        u.telefono,
+        u.direccion,
+        u.avatar_url,
+        u.activo,
+        r.nombre AS rol
+      FROM usuarios u
+      LEFT JOIN usuario_roles ur ON ur.usuario_id = u.id
+      LEFT JOIN roles r ON r.id = ur.rol_id
+      ORDER BY u.activo DESC, u.nombre ASC, u.id ASC
+    `);
+
+    return rows.map((row) => this.mapPublicUser(row));
+  }
+
+  async updateUserByAdmin({ userId, name, email, phone, address, roleName, active }) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const existingUser = await client.query(
+        `
+          SELECT id
+          FROM usuarios
+          WHERE LOWER(email) = LOWER($1) AND id <> $2
+          LIMIT 1
+        `,
+        [normalizedEmail, userId],
+      );
+
+      if (existingUser.rows[0]) {
+        await client.query('ROLLBACK');
+        return { error: 'EMAIL_EXISTS' };
+      }
+
+      const roleResult = await client.query(
+        'SELECT id, nombre FROM roles WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
+        [roleName],
+      );
+
+      const role = roleResult.rows[0];
+
+      if (!role) {
+        await client.query('ROLLBACK');
+        return { error: 'ROLE_NOT_FOUND' };
+      }
+
+      const updateResult = await client.query(
+        `
+          UPDATE usuarios
+          SET
+            nombre = $1,
+            email = $2,
+            telefono = $3,
+            direccion = $4,
+            activo = $5,
+            fecha_actualizacion = NOW()
+          WHERE id = $6
+          RETURNING id, nombre, email, telefono, direccion, avatar_url, activo
+        `,
+        [
+          name.trim(),
+          normalizedEmail,
+          phone ? phone.trim() : null,
+          address ? address.trim() : null,
+          active,
+          userId,
+        ],
+      );
+
+      const user = updateResult.rows[0];
+
+      if (!user) {
+        await client.query('ROLLBACK');
+        return { error: 'USER_NOT_FOUND' };
+      }
+
+      await client.query('DELETE FROM usuario_roles WHERE usuario_id = $1', [userId]);
+      await client.query('INSERT INTO usuario_roles (usuario_id, rol_id) VALUES ($1, $2)', [
+        userId,
+        role.id,
+      ]);
+
+      await client.query('COMMIT');
+
+      return {
+        user: this.mapPublicUser({
+          ...user,
+          rol: role.nombre,
+        }),
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async setUserActiveStatus({ userId, active }) {
+    const { rows } = await pool.query(
+      `
+        UPDATE usuarios
+        SET activo = $1, fecha_actualizacion = NOW()
+        WHERE id = $2
+        RETURNING id, nombre, email, telefono, direccion, avatar_url, activo
+      `,
+      [active, userId],
+    );
+
+    const user = rows[0];
+
+    if (!user) {
+      return { error: 'USER_NOT_FOUND' };
+    }
+
+    const roleResult = await pool.query(
+      `
+        SELECT r.nombre AS rol
+        FROM usuario_roles ur
+        INNER JOIN roles r ON r.id = ur.rol_id
+        WHERE ur.usuario_id = $1
+        LIMIT 1
+      `,
+      [userId],
+    );
+
+    return {
+      user: this.mapPublicUser({
+        ...user,
+        rol: roleResult.rows[0]?.rol || null,
+      }),
+    };
+  }
+}
+
+module.exports = new UserModel();
