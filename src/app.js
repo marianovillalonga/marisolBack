@@ -1,16 +1,25 @@
 const express = require('express');
 const cors = require('cors');
 
-const { FRONTEND_URL } = require('./config/env');
+const { FRONTEND_URLS } = require('./config/env');
 const routes = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middlewares/error.middleware');
 const { buildHealthResponse } = require('./views/health.view');
 
 const app = express();
 
+const allowedOrigins = new Set(FRONTEND_URLS);
+
 app.use(
   cors({
-    origin: FRONTEND_URL,
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origen no permitido por CORS: ${origin}`));
+    },
     credentials: true,
   }),
 );
