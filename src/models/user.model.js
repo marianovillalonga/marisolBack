@@ -1,7 +1,41 @@
 const pool = require('../config/db');
 const { hashPassword, isBcryptHash, verifyPassword } = require('../utils/hash.util');
+const { ADMIN_EMAIL, ADMIN_NAME, ADMIN_PASSWORD } = require('../config/env');
 
 class UserModel {
+  async ensureAuthTables() {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS roles (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(100) NOT NULL UNIQUE,
+        descripcion TEXT
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS usuarios (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(150) NOT NULL,
+        email VARCHAR(150) NOT NULL UNIQUE,
+        telefono VARCHAR(50),
+        direccion TEXT,
+        avatar_url TEXT,
+        password TEXT NOT NULL,
+        activo BOOLEAN NOT NULL DEFAULT true,
+        fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW(),
+        fecha_actualizacion TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS usuario_roles (
+        usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        rol_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+        PRIMARY KEY (usuario_id, rol_id)
+      )
+    `);
+  }
+
   async ensureProfileFields() {
     await pool.query(`
       ALTER TABLE IF EXISTS usuarios
@@ -27,6 +61,48 @@ class UserModel {
         SELECT 1 FROM roles WHERE LOWER(nombre) = 'vendedor'
       )
     `);
+  }
+
+  async ensureAdminUser() {
+    const existingAdmin = await this.findByEmail(ADMIN_EMAIL);
+
+    if (existingAdmin) {
+      const adminRole = await this.findRoleByName('admin');
+
+      if (adminRole) {
+        await pool.query(
+          `
+            INSERT INTO usuario_roles (usuario_id, rol_id)
+            VALUES ($1, $2)
+            ON CONFLICT (usuario_id, rol_id) DO NOTHING
+          `,
+          [existingAdmin.id, adminRole.id],
+        );
+      }
+
+      return;
+    }
+
+    const adminRole = await this.findRoleByName('admin');
+
+    if (!adminRole) {
+      throw new Error('No se pudo inicializar el rol admin');
+    }
+
+    const passwordHash = await hashPassword(ADMIN_PASSWORD);
+    const result = await this.createUser({
+      name: ADMIN_NAME,
+      email: ADMIN_EMAIL,
+      passwordHash,
+      roleName: adminRole.nombre,
+      phone: '',
+      address: '',
+      avatarUrl: '',
+    });
+
+    if (result.error) {
+      throw new Error(`No se pudo inicializar el usuario administrador: ${result.error}`);
+    }
   }
 
   mapPublicUser(user) {

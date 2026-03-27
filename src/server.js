@@ -8,8 +8,10 @@ const sessionModel = require('./models/session.model');
 const userModel = require('./models/user.model');
 
 async function startServer() {
+  await userModel.ensureAuthTables();
   await userModel.ensureProfileFields();
   await userModel.ensureBaseRoles();
+  await userModel.ensureAdminUser();
   await sessionModel.ensureRevokedTokensTable();
   await productModel.ensureProductsTable();
   await categoryModel.ensureCategoriesTable();
