@@ -11,6 +11,7 @@ class ProductModel {
       subcategoria: product.subcategoria,
       codigoBarras: product.codigo_barras,
       cantidad: Number(product.cantidad),
+      stockMinimo: Number(product.stock_minimo || 0),
       precio: Number(product.precio),
       detalle: product.detalle,
       imageUrl: product.image_url,
@@ -27,6 +28,7 @@ class ProductModel {
         categoria VARCHAR(100),
         subcategoria VARCHAR(100),
         cantidad INTEGER NOT NULL DEFAULT 0,
+        stock_minimo INTEGER NOT NULL DEFAULT 0,
         precio NUMERIC(12, 2) NOT NULL DEFAULT 0,
         detalle TEXT,
         image_url TEXT,
@@ -45,6 +47,10 @@ class ProductModel {
     await pool.query(`
       ALTER TABLE productos
       ADD COLUMN IF NOT EXISTS codigo_barras VARCHAR(120)
+    `);
+    await pool.query(`
+      ALTER TABLE productos
+      ADD COLUMN IF NOT EXISTS stock_minimo INTEGER NOT NULL DEFAULT 0
     `);
     await pool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_productos_codigo_barras_unique
@@ -82,6 +88,7 @@ class ProductModel {
         subcategoria,
         codigo_barras,
         cantidad,
+        stock_minimo,
         precio,
         detalle,
         image_url,
@@ -128,6 +135,7 @@ class ProductModel {
           subcategoria,
           codigo_barras,
           cantidad,
+          stock_minimo,
           precio,
           detalle,
           image_url,
@@ -147,7 +155,7 @@ class ProductModel {
     return this.mapProduct(rows[0]);
   }
 
-  async createProduct({ nombre, categoria, subcategoria, codigoBarras, cantidad, precio, detalle, imageUrl }) {
+  async createProduct({ nombre, categoria, subcategoria, codigoBarras, cantidad, stockMinimo, precio, detalle, imageUrl }) {
     const client = await pool.connect();
 
     try {
@@ -172,11 +180,12 @@ class ProductModel {
             subcategoria,
             codigo_barras,
             cantidad,
+            stock_minimo,
             precio,
             detalle,
             image_url
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           RETURNING
             id,
             nombre,
@@ -184,6 +193,7 @@ class ProductModel {
             subcategoria,
             codigo_barras,
             cantidad,
+            stock_minimo,
             precio,
             detalle,
             image_url,
@@ -196,6 +206,7 @@ class ProductModel {
           subcategoria || null,
           finalBarcode,
           cantidad,
+          stockMinimo,
           precio,
           detalle || null,
           imageUrl || null,
@@ -214,7 +225,7 @@ class ProductModel {
 
   async updateProduct(
     id,
-    { nombre, categoria, subcategoria, codigoBarras, cantidad, precio, detalle, imageUrl },
+    { nombre, categoria, subcategoria, codigoBarras, cantidad, stockMinimo, precio, detalle, imageUrl },
   ) {
     const client = await pool.connect();
 
@@ -252,9 +263,10 @@ class ProductModel {
             subcategoria = $4,
             codigo_barras = $5,
             cantidad = $6,
-            precio = $7,
-            detalle = $8,
-            image_url = $9
+            stock_minimo = $7,
+            precio = $8,
+            detalle = $9,
+            image_url = $10
           WHERE id = $1
           RETURNING
             id,
@@ -263,6 +275,7 @@ class ProductModel {
             subcategoria,
             codigo_barras,
             cantidad,
+            stock_minimo,
             precio,
             detalle,
             image_url,
@@ -276,6 +289,7 @@ class ProductModel {
           subcategoria || null,
           finalBarcode,
           cantidad,
+          stockMinimo,
           precio,
           detalle || null,
           imageUrl || null,
@@ -335,6 +349,7 @@ class ProductModel {
           subcategoria,
           codigo_barras,
           cantidad,
+          stock_minimo,
           precio,
           detalle,
           image_url,

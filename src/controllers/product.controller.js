@@ -10,7 +10,7 @@ const {
   buildProductsResponse,
 } = require('../views/product.view');
 
-function validateProductInput({ nombre, categoria, subcategoria, cantidad, precio, imageUrl }) {
+function validateProductInput({ nombre, categoria, subcategoria, cantidad, stockMinimo, precio, imageUrl }) {
   if (!nombre || !categoria || !subcategoria || cantidad === undefined || precio === undefined) {
     return 'Nombre, categoria, subcategoria, cantidad y precio son obligatorios';
   }
@@ -21,6 +21,10 @@ function validateProductInput({ nombre, categoria, subcategoria, cantidad, preci
 
   if (Number.isNaN(Number(precio)) || Number(precio) < 0) {
     return 'El precio debe ser un numero igual o mayor a 0';
+  }
+
+  if (stockMinimo === undefined || Number.isNaN(Number(stockMinimo)) || Number(stockMinimo) < 0) {
+    return 'El stock minimo debe ser un numero igual o mayor a 0';
   }
 
   const imageValidationError = validateImageUrl(imageUrl?.trim() || '');
@@ -113,6 +117,7 @@ async function createProduct(req, res, next) {
       subcategoria: req.body.subcategoria.trim(),
       codigoBarras: normalizedBarcode,
       cantidad: Number(req.body.cantidad),
+      stockMinimo: Number(req.body.stockMinimo),
       precio: Number(req.body.precio),
       detalle: req.body.detalle?.trim() || '',
       imageUrl: normalizedImage.imageUrl,
@@ -171,6 +176,7 @@ async function updateProduct(req, res, next) {
       subcategoria: req.body.subcategoria.trim(),
       codigoBarras: normalizedBarcode,
       cantidad: Number(req.body.cantidad),
+      stockMinimo: Number(req.body.stockMinimo),
       precio: Number(req.body.precio),
       detalle: req.body.detalle?.trim() || '',
       imageUrl: normalizedImage.imageUrl,
