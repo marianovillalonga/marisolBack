@@ -1,7 +1,7 @@
 const productModel = require('../models/product.model');
 const { registerAudit } = require('../utils/audit.util');
 const { buildMessageResponse } = require('../views/auth.view');
-const { isValidEan13, sanitizeBarcode } = require('../utils/barcode.util');
+const { buildEan13, isValidEan13, sanitizeBarcode } = require('../utils/barcode.util');
 const { normalizeImageUrl, validateImageUrl } = require('../utils/image.util');
 const {
   buildCategoriesResponse,
@@ -32,15 +32,19 @@ function validateProductInput({ nombre, categoria, subcategoria, cantidad, preci
   return null;
 }
 
-function validateBarcodeInput(codigoBarras) {
+function normalizeBarcodeInput(codigoBarras) {
   const sanitizedBarcode = sanitizeBarcode(codigoBarras || '');
 
   if (!sanitizedBarcode) {
-    return null;
+    return '';
   }
 
-  if (!isValidEan13(sanitizedBarcode)) {
-    return 'El codigo de barras debe ser un EAN-13 valido de 13 digitos';
+  if (/^\d{12}$/.test(sanitizedBarcode)) {
+    return buildEan13(sanitizedBarcode);
+  }
+
+  if (isValidEan13(sanitizedBarcode)) {
+    return sanitizedBarcode;
   }
 
   return null;
@@ -95,17 +99,19 @@ async function createProduct(req, res, next) {
       return res.status(400).json(buildMessageResponse(validationError));
     }
 
-    const barcodeValidationError = validateBarcodeInput(req.body.codigoBarras);
+    const normalizedBarcode = normalizeBarcodeInput(req.body.codigoBarras);
 
-    if (barcodeValidationError) {
-      return res.status(400).json(buildMessageResponse(barcodeValidationError));
+    if (normalizedBarcode === null) {
+      return res.status(400).json(
+        buildMessageResponse('El codigo de barras debe ser un EAN-13 valido de 13 digitos'),
+      );
     }
 
     const product = await productModel.createProduct({
       nombre: req.body.nombre.trim(),
       categoria: req.body.categoria.trim(),
       subcategoria: req.body.subcategoria.trim(),
-      codigoBarras: req.body.codigoBarras?.trim() || '',
+      codigoBarras: normalizedBarcode,
       cantidad: Number(req.body.cantidad),
       precio: Number(req.body.precio),
       detalle: req.body.detalle?.trim() || '',
@@ -151,17 +157,19 @@ async function updateProduct(req, res, next) {
       return res.status(400).json(buildMessageResponse(validationError));
     }
 
-    const barcodeValidationError = validateBarcodeInput(req.body.codigoBarras);
+    const normalizedBarcode = normalizeBarcodeInput(req.body.codigoBarras);
 
-    if (barcodeValidationError) {
-      return res.status(400).json(buildMessageResponse(barcodeValidationError));
+    if (normalizedBarcode === null) {
+      return res.status(400).json(
+        buildMessageResponse('El codigo de barras debe ser un EAN-13 valido de 13 digitos'),
+      );
     }
 
     const product = await productModel.updateProduct(Number(req.params.id), {
       nombre: req.body.nombre.trim(),
       categoria: req.body.categoria.trim(),
       subcategoria: req.body.subcategoria.trim(),
-      codigoBarras: req.body.codigoBarras?.trim() || '',
+      codigoBarras: normalizedBarcode,
       cantidad: Number(req.body.cantidad),
       precio: Number(req.body.precio),
       detalle: req.body.detalle?.trim() || '',
