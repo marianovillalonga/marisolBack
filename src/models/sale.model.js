@@ -9,6 +9,9 @@ class SaleModel {
       vendedorId: row.vendedor_id,
       vendedorNombre: row.vendedor_nombre,
       subtotal: Number(row.subtotal || 0),
+      ajusteMetodoPago: Number(row.ajuste_metodo_pago || 0),
+      ajusteMetodoPagoTipo: row.ajuste_metodo_pago_tipo || null,
+      ajusteMetodoPagoPorcentaje: Number(row.ajuste_metodo_pago_porcentaje || 0),
       descuento: Number(row.descuento || 0),
       total: Number(row.total || 0),
       montoPagado: Number(row.monto_pagado || 0),
@@ -40,6 +43,9 @@ class SaleModel {
         cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
         vendedor_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
         subtotal NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        ajuste_metodo_pago NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        ajuste_metodo_pago_tipo VARCHAR(20),
+        ajuste_metodo_pago_porcentaje NUMERIC(8, 2) NOT NULL DEFAULT 0,
         descuento NUMERIC(12, 2) NOT NULL DEFAULT 0,
         total NUMERIC(12, 2) NOT NULL DEFAULT 0,
         monto_pagado NUMERIC(12, 2) NOT NULL DEFAULT 0,
@@ -63,6 +69,13 @@ class SaleModel {
         precio_unitario NUMERIC(12, 2) NOT NULL DEFAULT 0,
         subtotal NUMERIC(12, 2) NOT NULL DEFAULT 0
       )
+    `);
+
+    await pool.query(`
+      ALTER TABLE IF EXISTS ventas
+      ADD COLUMN IF NOT EXISTS ajuste_metodo_pago NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS ajuste_metodo_pago_tipo VARCHAR(20),
+      ADD COLUMN IF NOT EXISTS ajuste_metodo_pago_porcentaje NUMERIC(8, 2) NOT NULL DEFAULT 0
     `);
 
     await pool.query(`
@@ -104,6 +117,9 @@ class SaleModel {
         v.vendedor_id,
         u.nombre AS vendedor_nombre,
         v.subtotal,
+        v.ajuste_metodo_pago,
+        v.ajuste_metodo_pago_tipo,
+        v.ajuste_metodo_pago_porcentaje,
         v.descuento,
         v.total,
         v.monto_pagado,
@@ -214,7 +230,19 @@ class SaleModel {
     };
   }
 
-  async createSale({ clientId, sellerId, descuento, montoPagado, metodoPago, notas, fechaVenta, items }) {
+  async createSale({
+    clientId,
+    sellerId,
+    descuento,
+    ajusteMetodoPago = 0,
+    ajusteMetodoPagoTipo = null,
+    ajusteMetodoPagoPorcentaje = 0,
+    montoPagado,
+    metodoPago,
+    notas,
+    fechaVenta,
+    items,
+  }) {
     const client = await pool.connect();
 
     try {
@@ -285,11 +313,14 @@ class SaleModel {
       }
 
       const subtotal = itemSnapshots.reduce((acc, item) => acc + item.subtotal, 0);
-      const total = subtotal - descuento;
+      const total = subtotal + ajusteMetodoPago - descuento;
       const deudaPendiente = Math.max(total - montoPagado, 0);
-      const itemDiscounts = distributeAmountAcrossItems(descuento, itemSnapshots.map((item) => item.subtotal));
+      const itemAdjustments = distributeAmountAcrossItems(
+        ajusteMetodoPago - descuento,
+        itemSnapshots.map((item) => item.subtotal),
+      );
       const itemNetTotals = itemSnapshots.map((item, index) =>
-        roundToTwo(item.subtotal - itemDiscounts[index]),
+        roundToTwo(item.subtotal + itemAdjustments[index]),
       );
       const itemPayments = distributeAmountAcrossItems(montoPagado, itemNetTotals);
 
@@ -299,6 +330,9 @@ class SaleModel {
             cliente_id,
             vendedor_id,
             subtotal,
+            ajuste_metodo_pago,
+            ajuste_metodo_pago_tipo,
+            ajuste_metodo_pago_porcentaje,
             descuento,
             total,
             monto_pagado,
@@ -308,13 +342,16 @@ class SaleModel {
             notas,
             fecha_venta
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'confirmada', $9, $10)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'confirmada', $12, $13)
           RETURNING id
         `,
         [
           clientId || null,
           sellerId,
           subtotal,
+          ajusteMetodoPago,
+          ajusteMetodoPagoTipo,
+          ajusteMetodoPagoPorcentaje,
           descuento,
           total,
           montoPagado,
@@ -456,8 +493,8 @@ class SaleModel {
   }
 
   async repairClientPurchasesFromSales() {
-    const { rows: sales } = await pool.query(`
-      SELECT id, descuento, monto_pagado
+      const { rows: sales } = await pool.query(`
+      SELECT id, descuento, ajuste_metodo_pago, monto_pagado
       FROM ventas
       WHERE estado <> 'anulada'
         AND EXISTS (SELECT 1 FROM cliente_compras cc WHERE cc.venta_id = ventas.id)
@@ -489,8 +526,11 @@ class SaleModel {
       }
 
       const subtotals = details.map((detail) => Number(detail.subtotal || 0));
-      const discounts = distributeAmountAcrossItems(Number(sale.descuento || 0), subtotals);
-      const netTotals = subtotals.map((subtotal, index) => roundToTwo(subtotal - discounts[index]));
+      const adjustments = distributeAmountAcrossItems(
+        Number(sale.ajuste_metodo_pago || 0) - Number(sale.descuento || 0),
+        subtotals,
+      );
+      const netTotals = subtotals.map((subtotal, index) => roundToTwo(subtotal + adjustments[index]));
       const payments = distributeAmountAcrossItems(Number(sale.monto_pagado || 0), netTotals);
 
       for (let index = 0; index < purchases.length; index += 1) {

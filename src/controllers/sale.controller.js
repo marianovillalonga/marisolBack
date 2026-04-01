@@ -7,7 +7,15 @@ const {
   buildSalesSummaryResponse,
 } = require('../views/sale.view');
 
-function validateSaleInput({ clientId, descuento, montoPagado, metodoPago, fechaVenta, items }) {
+function validateSaleInput({
+  clientId,
+  descuento,
+  ajusteMetodoPago = 0,
+  montoPagado,
+  metodoPago,
+  fechaVenta,
+  items,
+}) {
   if (clientId !== null && clientId !== undefined && Number.isNaN(Number(clientId))) {
     return 'El cliente seleccionado no es valido';
   }
@@ -18,6 +26,10 @@ function validateSaleInput({ clientId, descuento, montoPagado, metodoPago, fecha
 
   if (Number.isNaN(Number(descuento)) || Number(descuento) < 0) {
     return 'El descuento debe ser un numero igual o mayor a 0';
+  }
+
+  if (Number.isNaN(Number(ajusteMetodoPago))) {
+    return 'El ajuste por metodo de pago debe ser un numero valido';
   }
 
   if (Number.isNaN(Number(montoPagado)) || Number(montoPagado) < 0) {
@@ -50,10 +62,10 @@ function validateSaleInput({ clientId, descuento, montoPagado, metodoPago, fecha
     (accumulator, item) => accumulator + Number(item.cantidad) * Number(item.precioUnitario),
     0,
   );
-  const total = subtotal - Number(descuento);
+  const total = subtotal + Number(ajusteMetodoPago) - Number(descuento);
 
   if (total < 0) {
-    return 'El descuento no puede superar el subtotal';
+    return 'El total de la venta no puede ser menor a 0';
   }
 
   if (Number(montoPagado) > total) {
@@ -119,6 +131,9 @@ async function createSale(req, res, next) {
       clientId: req.body.clientId ? Number(req.body.clientId) : null,
       sellerId: req.user.id,
       descuento: Number(req.body.descuento),
+      ajusteMetodoPago: Number(req.body.ajusteMetodoPago || 0),
+      ajusteMetodoPagoTipo: req.body.ajusteMetodoPagoTipo?.trim?.() || null,
+      ajusteMetodoPagoPorcentaje: Number(req.body.ajusteMetodoPagoPorcentaje || 0),
       montoPagado: Number(req.body.montoPagado),
       metodoPago: req.body.metodoPago.trim(),
       notas: req.body.notas?.trim() || '',

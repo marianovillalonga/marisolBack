@@ -20,6 +20,7 @@ class UserModel {
         telefono VARCHAR(50),
         direccion TEXT,
         avatar_url TEXT,
+        configuracion_metodos_pago JSONB NOT NULL DEFAULT '{}'::jsonb,
         password TEXT NOT NULL,
         activo BOOLEAN NOT NULL DEFAULT true,
         fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -41,7 +42,8 @@ class UserModel {
       ALTER TABLE IF EXISTS usuarios
       ADD COLUMN IF NOT EXISTS telefono VARCHAR(50),
       ADD COLUMN IF NOT EXISTS direccion TEXT,
-      ADD COLUMN IF NOT EXISTS avatar_url TEXT
+      ADD COLUMN IF NOT EXISTS avatar_url TEXT,
+      ADD COLUMN IF NOT EXISTS configuracion_metodos_pago JSONB NOT NULL DEFAULT '{}'::jsonb
     `);
   }
 
@@ -114,8 +116,33 @@ class UserModel {
       phone: user.telefono || '',
       address: user.direccion || '',
       avatarUrl: user.avatar_url || '',
+      paymentMethodSettings: this.normalizePaymentMethodSettings(user.configuracion_metodos_pago),
       active: typeof user.activo === 'boolean' ? user.activo : true,
     };
+  }
+
+  normalizePaymentMethodSettings(rawSettings) {
+    const source =
+      rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings) ? rawSettings : {};
+
+    return ['efectivo', 'transferencia', 'tarjeta', 'cuenta_corriente'].reduce(
+      (accumulator, method) => {
+        const entry =
+          source[method] && typeof source[method] === 'object' && !Array.isArray(source[method])
+            ? source[method]
+            : {};
+        const tipo = entry.tipo === 'aumento' ? 'aumento' : 'descuento';
+        const porcentaje = Number(entry.porcentaje || 0);
+
+        accumulator[method] = {
+          tipo,
+          porcentaje: Number.isFinite(porcentaje) && porcentaje >= 0 ? porcentaje : 0,
+        };
+
+        return accumulator;
+      },
+      {},
+    );
   }
 
   async findByEmail(email) {
@@ -127,6 +154,7 @@ class UserModel {
         u.telefono,
         u.direccion,
         u.avatar_url,
+        u.configuracion_metodos_pago,
         u.password,
         u.activo,
         r.nombre AS rol
@@ -160,6 +188,7 @@ class UserModel {
         u.telefono,
         u.direccion,
         u.avatar_url,
+        u.configuracion_metodos_pago,
         u.activo,
         r.nombre AS rol
       FROM usuarios u
@@ -201,7 +230,16 @@ class UserModel {
     return this.mapPublicUser(user);
   }
 
-  async createUser({ name, email, passwordHash, roleName, phone, address, avatarUrl }) {
+  async createUser({
+    name,
+    email,
+    passwordHash,
+    roleName,
+    phone,
+    address,
+    avatarUrl,
+    paymentMethodSettings = {},
+  }) {
     const client = await pool.connect();
 
     try {
@@ -237,13 +275,14 @@ class UserModel {
             telefono,
             direccion,
             avatar_url,
+            configuracion_metodos_pago,
             password,
             activo,
             fecha_creacion,
             fecha_actualizacion
           )
-          VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
-          RETURNING id, nombre, email, telefono, direccion, avatar_url
+          VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, true, NOW(), NOW())
+          RETURNING id, nombre, email, telefono, direccion, avatar_url, configuracion_metodos_pago
         `,
         [
           name,
@@ -251,6 +290,7 @@ class UserModel {
           phone ? phone.trim() : null,
           address ? address.trim() : null,
           avatarUrl ? avatarUrl.trim() : null,
+          JSON.stringify(this.normalizePaymentMethodSettings(paymentMethodSettings)),
           passwordHash,
         ],
       );
@@ -280,7 +320,7 @@ class UserModel {
     }
   }
 
-  async updateProfile({ userId, name, email, phone, address, avatarUrl }) {
+  async updateProfile({ userId, name, email, phone, address, avatarUrl, paymentMethodSettings = {} }) {
     const normalizedEmail = email.trim().toLowerCase();
     const client = await pool.connect();
 
@@ -311,9 +351,10 @@ class UserModel {
             telefono = $3,
             direccion = $4,
             avatar_url = $5,
+            configuracion_metodos_pago = $6::jsonb,
             fecha_actualizacion = NOW()
-          WHERE id = $6 AND activo = true
-          RETURNING id, nombre, email, telefono, direccion, avatar_url
+          WHERE id = $7 AND activo = true
+          RETURNING id, nombre, email, telefono, direccion, avatar_url, configuracion_metodos_pago
         `,
         [
           name.trim(),
@@ -321,6 +362,7 @@ class UserModel {
           phone ? phone.trim() : null,
           address ? address.trim() : null,
           avatarUrl ? avatarUrl.trim() : null,
+          JSON.stringify(this.normalizePaymentMethodSettings(paymentMethodSettings)),
           userId,
         ],
       );
@@ -407,6 +449,7 @@ class UserModel {
         u.telefono,
         u.direccion,
         u.avatar_url,
+        u.configuracion_metodos_pago,
         u.activo,
         r.nombre AS rol
       FROM usuarios u
@@ -463,7 +506,7 @@ class UserModel {
             activo = $5,
             fecha_actualizacion = NOW()
           WHERE id = $6
-          RETURNING id, nombre, email, telefono, direccion, avatar_url, activo
+          RETURNING id, nombre, email, telefono, direccion, avatar_url, configuracion_metodos_pago, activo
         `,
         [
           name.trim(),
@@ -510,7 +553,7 @@ class UserModel {
         UPDATE usuarios
         SET activo = $1, fecha_actualizacion = NOW()
         WHERE id = $2
-        RETURNING id, nombre, email, telefono, direccion, avatar_url, activo
+        RETURNING id, nombre, email, telefono, direccion, avatar_url, configuracion_metodos_pago, activo
       `,
       [active, userId],
     );

@@ -9,7 +9,16 @@ const {
 
 async function createUser(req, res, next) {
   try {
-    const { name, email, password, role = 'vendedor', phone = '', address = '', avatarUrl = '' } =
+    const {
+      name,
+      email,
+      password,
+      role = 'vendedor',
+      phone = '',
+      address = '',
+      avatarUrl = '',
+      paymentMethodSettings = {},
+    } =
       req.body;
 
     if (!name || !email || !password) {
@@ -25,6 +34,7 @@ async function createUser(req, res, next) {
       phone,
       address,
       avatarUrl,
+      paymentMethodSettings,
     });
 
     if (result.error === 'EMAIL_EXISTS') {
@@ -43,7 +53,7 @@ async function createUser(req, res, next) {
 
 async function updateProfile(req, res, next) {
   try {
-    const { name, email, phone = '', address = '', avatarUrl = '' } = req.body;
+    const { name, email, phone = '', address = '', avatarUrl = '', paymentMethodSettings = {} } = req.body;
 
     if (!name || !email) {
       return res.status(400).json(buildMessageResponse('Nombre y email son obligatorios'));
@@ -56,6 +66,7 @@ async function updateProfile(req, res, next) {
       phone,
       address,
       avatarUrl,
+      paymentMethodSettings,
     });
 
     if (result.error === 'EMAIL_EXISTS') {
