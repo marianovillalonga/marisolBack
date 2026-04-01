@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const categoryModel = require('./category.model');
+const { buildEan13 } = require('../utils/barcode.util');
 
 class ProductModel {
   mapProduct(product) {
@@ -292,7 +293,8 @@ class ProductModel {
   }
 
   async generateBarcode(categoryCode, subcategoryCode, client = pool, productIdToExclude = null) {
-    const params = [`${categoryCode}${subcategoryCode}%`];
+    const prefix = `${categoryCode}${subcategoryCode}`;
+    const params = [`${prefix}%`];
     let exclusionClause = '';
 
     if (productIdToExclude) {
@@ -305,7 +307,7 @@ class ProductModel {
         SELECT codigo_barras
         FROM productos
         WHERE codigo_barras LIKE $1
-          AND LENGTH(codigo_barras) = 12
+          AND LENGTH(codigo_barras) = 13
           ${exclusionClause}
         ORDER BY codigo_barras DESC
         LIMIT 1
@@ -313,10 +315,11 @@ class ProductModel {
       params,
     );
 
-    const lastSequence = rows[0]?.codigo_barras?.slice(-4) || '0000';
+    const lastBase = rows[0]?.codigo_barras?.slice(0, 12) || `${prefix}0000`;
+    const lastSequence = lastBase.slice(-4);
     const nextSequence = String(Number(lastSequence) + 1).padStart(4, '0');
 
-    return `${categoryCode}${subcategoryCode}${nextSequence}`;
+    return buildEan13(`${prefix}${nextSequence}`);
   }
 
   async adjustPricesByCategory(category, percentage) {

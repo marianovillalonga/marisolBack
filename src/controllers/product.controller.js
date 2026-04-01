@@ -1,6 +1,7 @@
 const productModel = require('../models/product.model');
 const { registerAudit } = require('../utils/audit.util');
 const { buildMessageResponse } = require('../views/auth.view');
+const { isValidEan13, sanitizeBarcode } = require('../utils/barcode.util');
 const { normalizeImageUrl, validateImageUrl } = require('../utils/image.util');
 const {
   buildCategoriesResponse,
@@ -26,6 +27,20 @@ function validateProductInput({ nombre, categoria, subcategoria, cantidad, preci
 
   if (imageValidationError) {
     return imageValidationError;
+  }
+
+  return null;
+}
+
+function validateBarcodeInput(codigoBarras) {
+  const sanitizedBarcode = sanitizeBarcode(codigoBarras || '');
+
+  if (!sanitizedBarcode) {
+    return null;
+  }
+
+  if (!isValidEan13(sanitizedBarcode)) {
+    return 'El codigo de barras debe ser un EAN-13 valido de 13 digitos';
   }
 
   return null;
@@ -80,6 +95,12 @@ async function createProduct(req, res, next) {
       return res.status(400).json(buildMessageResponse(validationError));
     }
 
+    const barcodeValidationError = validateBarcodeInput(req.body.codigoBarras);
+
+    if (barcodeValidationError) {
+      return res.status(400).json(buildMessageResponse(barcodeValidationError));
+    }
+
     const product = await productModel.createProduct({
       nombre: req.body.nombre.trim(),
       categoria: req.body.categoria.trim(),
@@ -128,6 +149,12 @@ async function updateProduct(req, res, next) {
 
     if (validationError) {
       return res.status(400).json(buildMessageResponse(validationError));
+    }
+
+    const barcodeValidationError = validateBarcodeInput(req.body.codigoBarras);
+
+    if (barcodeValidationError) {
+      return res.status(400).json(buildMessageResponse(barcodeValidationError));
     }
 
     const product = await productModel.updateProduct(Number(req.params.id), {
