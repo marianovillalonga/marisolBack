@@ -1,4 +1,9 @@
 const pool = require('../config/db');
+const {
+  distributeAmountAcrossItems,
+  groupSaleItemsByProduct,
+  roundToTwo,
+} = require('../utils/sale.util');
 
 class SaleModel {
   mapSale(row) {
@@ -273,9 +278,10 @@ class SaleModel {
         return { error: 'SELLER_NOT_FOUND' };
       }
 
+      const groupedItems = groupSaleItemsByProduct(items);
       const itemSnapshots = [];
 
-      for (const item of items) {
+      for (const groupedItem of groupedItems) {
         const productResult = await client.query(
           `
             SELECT id, nombre, cantidad, precio
@@ -284,7 +290,7 @@ class SaleModel {
             LIMIT 1
             FOR UPDATE
           `,
-          [item.productoId],
+          [groupedItem.productoId],
         );
 
         const product = productResult.rows[0];
@@ -294,7 +300,7 @@ class SaleModel {
           return { error: 'PRODUCT_NOT_FOUND' };
         }
 
-        if (Number(product.cantidad) < item.cantidad) {
+        if (Number(product.cantidad) < groupedItem.cantidadTotal) {
           await client.query('ROLLBACK');
           return {
             error: 'INSUFFICIENT_STOCK',
@@ -364,7 +370,11 @@ class SaleModel {
 
       const saleId = saleResult.rows[0].id;
 
-      for (const item of itemSnapshots) {
+      for (const item of items) {
+        const productSnapshot = itemSnapshots.find(
+          (snapshot) => snapshot.productoId === Number(item.productoId),
+        );
+
         await client.query(
           `
             INSERT INTO venta_detalles (
@@ -377,9 +387,18 @@ class SaleModel {
             )
             VALUES ($1, $2, $3, $4, $5, $6)
           `,
-          [saleId, item.productoId, item.productoNombre, item.cantidad, item.precioUnitario, item.subtotal],
+          [
+            saleId,
+            Number(item.productoId),
+            productSnapshot?.productoNombre || '',
+            Number(item.cantidad),
+            Number(item.precioUnitario),
+            Number(item.cantidad) * Number(item.precioUnitario),
+          ],
         );
+      }
 
+      for (const item of itemSnapshots) {
         await client.query(
           `
             UPDATE productos
@@ -551,29 +570,6 @@ class SaleModel {
 
 function notesForClientSale(notes) {
   return notes ? `Venta registrada: ${notes}` : 'Venta registrada desde modulo de ventas';
-}
-
-function roundToTwo(value) {
-  return Number(value.toFixed(2));
-}
-
-function distributeAmountAcrossItems(amount, bases) {
-  const safeAmount = roundToTwo(amount);
-  const totalBase = bases.reduce((accumulator, value) => accumulator + value, 0);
-
-  if (totalBase <= 0) {
-    return bases.map(() => 0);
-  }
-
-  const distributed = bases.map((base) => roundToTwo((safeAmount * base) / totalBase));
-  const assigned = roundToTwo(distributed.reduce((accumulator, value) => accumulator + value, 0));
-  const difference = roundToTwo(safeAmount - assigned);
-
-  if (difference !== 0 && distributed.length) {
-    distributed[distributed.length - 1] = roundToTwo(distributed[distributed.length - 1] + difference);
-  }
-
-  return distributed;
 }
 
 module.exports = new SaleModel();

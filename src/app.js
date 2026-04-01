@@ -4,6 +4,7 @@ const cors = require('cors');
 const { FRONTEND_URLS } = require('./config/env');
 const routes = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middlewares/error.middleware');
+const { apiRateLimit } = require('./middlewares/rate-limit.middleware');
 const logger = require('./utils/logger.util');
 const { buildHealthResponse } = require('./views/health.view');
 
@@ -26,6 +27,7 @@ app.use(
 );
 app.use(express.json({ limit: '15mb' }));
 app.use(logger.createRequestLogger());
+app.use('/api', apiRateLimit);
 
 app.get('/api/health', (_req, res) => {
   res.status(200).json(buildHealthResponse());

@@ -3,6 +3,8 @@ const { Pool } = require('pg');
 const isProduction = process.env.NODE_ENV === 'production';
 const databaseUrl = process.env.DATABASE_URL;
 const explicitDbSsl = process.env.DB_SSL;
+const explicitDbSslRejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED;
+const explicitDbCaCert = process.env.DB_CA_CERT;
 const localConfig = {
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT) || 5432,
@@ -38,16 +40,26 @@ function shouldUseSsl(connectionString) {
   }
 }
 
+function buildSslConfig() {
+  if (!useSsl) {
+    return false;
+  }
+
+  const rejectUnauthorized = parseBoolean(explicitDbSslRejectUnauthorized);
+
+  return {
+    rejectUnauthorized: rejectUnauthorized !== false,
+    ca: explicitDbCaCert || undefined,
+  };
+}
+
 const useSsl = shouldUseSsl(databaseUrl);
+const sslConfig = buildSslConfig();
 
 const poolConfig = databaseUrl
   ? {
       connectionString: databaseUrl,
-      ssl: useSsl
-        ? {
-            rejectUnauthorized: false,
-          }
-        : false,
+      ssl: sslConfig,
     }
   : localConfig;
 

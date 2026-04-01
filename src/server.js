@@ -3,13 +3,14 @@ const auditModel = require('./models/audit.model');
 const categoryModel = require('./models/category.model');
 const clientModel = require('./models/client.model');
 const budgetModel = require('./models/budget.model');
-const { PORT } = require('./config/env');
+const { PORT, validateRuntimeConfig } = require('./config/env');
 const productModel = require('./models/product.model');
 const saleModel = require('./models/sale.model');
 const sessionModel = require('./models/session.model');
 const userModel = require('./models/user.model');
 
 async function startServer() {
+  validateRuntimeConfig();
   await userModel.ensureAuthTables();
   await userModel.ensureProfileFields();
   await userModel.ensureBaseRoles();
