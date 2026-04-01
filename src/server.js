@@ -4,6 +4,7 @@ const categoryModel = require('./models/category.model');
 const clientModel = require('./models/client.model');
 const budgetModel = require('./models/budget.model');
 const { PORT, validateRuntimeConfig } = require('./config/env');
+const orderModel = require('./models/order.model');
 const productModel = require('./models/product.model');
 const saleModel = require('./models/sale.model');
 const sessionModel = require('./models/session.model');
@@ -19,6 +20,7 @@ async function startServer() {
   await productModel.ensureProductsTable();
   await categoryModel.ensureCategoriesTable();
   await clientModel.ensureClientsTables();
+  await orderModel.ensureOrdersTables();
   await saleModel.ensureSalesTables();
   await budgetModel.ensureBudgetsTables();
   await auditModel.ensureAuditTable();
