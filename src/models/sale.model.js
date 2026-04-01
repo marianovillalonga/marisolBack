@@ -279,7 +279,7 @@ class SaleModel {
       }
 
       const groupedItems = groupSaleItemsByProduct(items);
-      const itemSnapshots = [];
+      const productsById = new Map();
 
       for (const groupedItem of groupedItems) {
         const productResult = await client.query(
@@ -309,14 +309,23 @@ class SaleModel {
           };
         }
 
-        itemSnapshots.push({
+        productsById.set(product.id, {
           productoId: product.id,
           productoNombre: product.nombre,
-          cantidad: item.cantidad,
-          precioUnitario: item.precioUnitario,
-          subtotal: Number(item.cantidad) * Number(item.precioUnitario),
         });
       }
+
+      const itemSnapshots = items.map((item) => {
+        const productSnapshot = productsById.get(Number(item.productoId));
+
+        return {
+          productoId: Number(item.productoId),
+          productoNombre: productSnapshot?.productoNombre || '',
+          cantidad: Number(item.cantidad),
+          precioUnitario: Number(item.precioUnitario),
+          subtotal: Number(item.cantidad) * Number(item.precioUnitario),
+        };
+      });
 
       const subtotal = itemSnapshots.reduce((acc, item) => acc + item.subtotal, 0);
       const total = subtotal + ajusteMetodoPago - descuento;
@@ -398,14 +407,14 @@ class SaleModel {
         );
       }
 
-      for (const item of itemSnapshots) {
+      for (const groupedItem of groupedItems) {
         await client.query(
           `
             UPDATE productos
             SET cantidad = cantidad - $2
             WHERE id = $1
           `,
-          [item.productoId, item.cantidad],
+          [groupedItem.productoId, groupedItem.cantidadTotal],
         );
       }
 
