@@ -8,9 +8,9 @@ const {
   buildProductsResponse,
 } = require('../views/product.view');
 
-function validateProductInput({ nombre, categoria, cantidad, precio, imageUrl }) {
-  if (!nombre || !categoria || cantidad === undefined || precio === undefined) {
-    return 'Nombre, categoria, cantidad y precio son obligatorios';
+function validateProductInput({ nombre, categoria, subcategoria, cantidad, precio, imageUrl }) {
+  if (!nombre || !categoria || !subcategoria || cantidad === undefined || precio === undefined) {
+    return 'Nombre, categoria, subcategoria, cantidad y precio son obligatorios';
   }
 
   if (Number.isNaN(Number(cantidad)) || Number(cantidad) < 0) {
@@ -82,6 +82,7 @@ async function createProduct(req, res, next) {
     const product = await productModel.createProduct({
       nombre: req.body.nombre.trim(),
       categoria: req.body.categoria.trim(),
+      subcategoria: req.body.subcategoria.trim(),
       codigoBarras: req.body.codigoBarras?.trim() || '',
       cantidad: Number(req.body.cantidad),
       precio: Number(req.body.precio),
@@ -119,6 +120,7 @@ async function updateProduct(req, res, next) {
     const product = await productModel.updateProduct(Number(req.params.id), {
       nombre: req.body.nombre.trim(),
       categoria: req.body.categoria.trim(),
+      subcategoria: req.body.subcategoria.trim(),
       codigoBarras: req.body.codigoBarras?.trim() || '',
       cantidad: Number(req.body.cantidad),
       precio: Number(req.body.precio),

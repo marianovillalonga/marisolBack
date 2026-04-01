@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const categoryModel = require('./category.model');
 
 class ProductModel {
   mapProduct(product) {
@@ -6,6 +7,7 @@ class ProductModel {
       id: product.id,
       nombre: product.nombre,
       categoria: product.categoria,
+      subcategoria: product.subcategoria,
       codigoBarras: product.codigo_barras,
       cantidad: Number(product.cantidad),
       precio: Number(product.precio),
@@ -22,6 +24,7 @@ class ProductModel {
         id SERIAL PRIMARY KEY,
         nombre VARCHAR(150) NOT NULL,
         categoria VARCHAR(100),
+        subcategoria VARCHAR(100),
         cantidad INTEGER NOT NULL DEFAULT 0,
         precio NUMERIC(12, 2) NOT NULL DEFAULT 0,
         detalle TEXT,
@@ -33,6 +36,10 @@ class ProductModel {
     await pool.query(`
       ALTER TABLE productos
       ADD COLUMN IF NOT EXISTS categoria VARCHAR(100)
+    `);
+    await pool.query(`
+      ALTER TABLE productos
+      ADD COLUMN IF NOT EXISTS subcategoria VARCHAR(100)
     `);
     await pool.query(`
       ALTER TABLE productos
@@ -71,6 +78,7 @@ class ProductModel {
         id,
         nombre,
         categoria,
+        subcategoria,
         codigo_barras,
         cantidad,
         precio,
@@ -83,6 +91,7 @@ class ProductModel {
         (
           $1 = '%%'
           OR LOWER(nombre) LIKE $1
+          OR LOWER(COALESCE(subcategoria, '')) LIKE $1
           OR LOWER(COALESCE(detalle, '')) LIKE $1
           OR LOWER(COALESCE(codigo_barras, '')) LIKE $1
         )
@@ -115,6 +124,7 @@ class ProductModel {
           id,
           nombre,
           categoria,
+          subcategoria,
           codigo_barras,
           cantidad,
           precio,
@@ -136,79 +146,177 @@ class ProductModel {
     return this.mapProduct(rows[0]);
   }
 
-  async createProduct({ nombre, categoria, codigoBarras, cantidad, precio, detalle, imageUrl }) {
-    const { rows } = await pool.query(
-      `
-        INSERT INTO productos (nombre, categoria, codigo_barras, cantidad, precio, detalle, image_url)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING
-          id,
+  async createProduct({ nombre, categoria, subcategoria, codigoBarras, cantidad, precio, detalle, imageUrl }) {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const category = await categoryModel.findOrCreateCategory(categoria, client);
+      const subcategory = await categoryModel.findOrCreateSubcategory(
+        category.id,
+        subcategoria,
+        client,
+      );
+      const finalBarcode =
+        codigoBarras && codigoBarras.trim()
+          ? codigoBarras.trim()
+          : await this.generateBarcode(category.codigo, subcategory.codigo, client);
+
+      const { rows } = await client.query(
+        `
+          INSERT INTO productos (
+            nombre,
+            categoria,
+            subcategoria,
+            codigo_barras,
+            cantidad,
+            precio,
+            detalle,
+            image_url
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          RETURNING
+            id,
+            nombre,
+            categoria,
+            subcategoria,
+            codigo_barras,
+            cantidad,
+            precio,
+            detalle,
+            image_url,
+            fecha_creacion,
+            fecha_actualizacion
+        `,
+        [
           nombre,
-          categoria,
-          codigo_barras,
+          categoria || null,
+          subcategoria || null,
+          finalBarcode,
           cantidad,
           precio,
-          detalle,
-          image_url,
-          fecha_creacion,
-          fecha_actualizacion
-      `,
-      [
-        nombre,
-        categoria || null,
-        codigoBarras || null,
-        cantidad,
-        precio,
-        detalle || null,
-        imageUrl || null,
-      ],
-    );
+          detalle || null,
+          imageUrl || null,
+        ],
+      );
 
-    return this.mapProduct(rows[0]);
+      await client.query('COMMIT');
+      return this.mapProduct(rows[0]);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
-  async updateProduct(id, { nombre, categoria, codigoBarras, cantidad, precio, detalle, imageUrl }) {
-    const { rows } = await pool.query(
-      `
-        UPDATE productos
-        SET
-          nombre = $2,
-          categoria = $3,
-          codigo_barras = $4,
-          cantidad = $5,
-          precio = $6,
-          detalle = $7,
-          image_url = $8
-        WHERE id = $1
-        RETURNING
+  async updateProduct(
+    id,
+    { nombre, categoria, subcategoria, codigoBarras, cantidad, precio, detalle, imageUrl },
+  ) {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const existingResult = await client.query(
+        'SELECT id, codigo_barras FROM productos WHERE id = $1 LIMIT 1 FOR UPDATE',
+        [id],
+      );
+
+      if (!existingResult.rows[0]) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+
+      const category = await categoryModel.findOrCreateCategory(categoria, client);
+      const subcategory = await categoryModel.findOrCreateSubcategory(
+        category.id,
+        subcategoria,
+        client,
+      );
+      const finalBarcode =
+        codigoBarras && codigoBarras.trim()
+          ? codigoBarras.trim()
+          : existingResult.rows[0].codigo_barras ||
+            (await this.generateBarcode(category.codigo, subcategory.codigo, client, id));
+
+      const { rows } = await client.query(
+        `
+          UPDATE productos
+          SET
+            nombre = $2,
+            categoria = $3,
+            subcategoria = $4,
+            codigo_barras = $5,
+            cantidad = $6,
+            precio = $7,
+            detalle = $8,
+            image_url = $9
+          WHERE id = $1
+          RETURNING
+            id,
+            nombre,
+            categoria,
+            subcategoria,
+            codigo_barras,
+            cantidad,
+            precio,
+            detalle,
+            image_url,
+            fecha_creacion,
+            fecha_actualizacion
+        `,
+        [
           id,
           nombre,
-          categoria,
-          codigo_barras,
+          categoria || null,
+          subcategoria || null,
+          finalBarcode,
           cantidad,
           precio,
-          detalle,
-          image_url,
-          fecha_creacion,
-          fecha_actualizacion
-      `,
-      [
-        id,
-        nombre,
-        categoria || null,
-        codigoBarras || null,
-        cantidad,
-        precio,
-        detalle || null,
-        imageUrl || null,
-      ],
-    );
+          detalle || null,
+          imageUrl || null,
+        ],
+      );
 
-    if (!rows[0]) {
-      return null;
+      await client.query('COMMIT');
+      return this.mapProduct(rows[0]);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async generateBarcode(categoryCode, subcategoryCode, client = pool, productIdToExclude = null) {
+    const params = [`${categoryCode}${subcategoryCode}%`];
+    let exclusionClause = '';
+
+    if (productIdToExclude) {
+      params.push(productIdToExclude);
+      exclusionClause = 'AND id <> $2';
     }
 
-    return this.mapProduct(rows[0]);
+    const { rows } = await client.query(
+      `
+        SELECT codigo_barras
+        FROM productos
+        WHERE codigo_barras LIKE $1
+          AND LENGTH(codigo_barras) = 12
+          ${exclusionClause}
+        ORDER BY codigo_barras DESC
+        LIMIT 1
+      `,
+      params,
+    );
+
+    const lastSequence = rows[0]?.codigo_barras?.slice(-4) || '0000';
+    const nextSequence = String(Number(lastSequence) + 1).padStart(4, '0');
+
+    return `${categoryCode}${subcategoryCode}${nextSequence}`;
   }
 
   async adjustPricesByCategory(category, percentage) {
@@ -221,6 +329,7 @@ class ProductModel {
           id,
           nombre,
           categoria,
+          subcategoria,
           codigo_barras,
           cantidad,
           precio,
