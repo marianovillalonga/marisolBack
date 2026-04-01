@@ -1,4 +1,5 @@
 const app = require('./app');
+const auditModel = require('./models/audit.model');
 const categoryModel = require('./models/category.model');
 const clientModel = require('./models/client.model');
 const budgetModel = require('./models/budget.model');
@@ -19,6 +20,7 @@ async function startServer() {
   await clientModel.ensureClientsTables();
   await saleModel.ensureSalesTables();
   await budgetModel.ensureBudgetsTables();
+  await auditModel.ensureAuditTable();
   await saleModel.repairClientPurchasesFromSales();
 
   app.listen(PORT, () => {

@@ -1,5 +1,6 @@
 const userModel = require('../models/user.model');
 const sessionModel = require('../models/session.model');
+const { registerAudit } = require('../utils/audit.util');
 const { createAuthToken } = require('../utils/token.util');
 const {
   buildCurrentUserResponse,
@@ -26,6 +27,16 @@ async function login(req, res, next) {
       sub: user.id,
       email: user.email,
       role: user.role,
+    });
+
+    await registerAudit(req, {
+      action: 'login',
+      entity: 'auth',
+      entityId: user.id,
+      details: {
+        email: user.email,
+        role: user.role,
+      },
     });
 
     return res.status(200).json(buildLoginSuccessResponse(user, token));
@@ -58,6 +69,15 @@ async function logout(req, res, next) {
       jti: req.tokenPayload.jti,
       userId: req.user.id,
       expiresAt: new Date(req.tokenPayload.exp * 1000),
+    });
+
+    await registerAudit(req, {
+      action: 'logout',
+      entity: 'auth',
+      entityId: req.user.id,
+      details: {
+        email: req.user.email,
+      },
     });
 
     return res.status(200).json(buildLogoutResponse());

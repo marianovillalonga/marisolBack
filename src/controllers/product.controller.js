@@ -1,4 +1,5 @@
 const productModel = require('../models/product.model');
+const { registerAudit } = require('../utils/audit.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const { normalizeImageUrl, validateImageUrl } = require('../utils/image.util');
 const {
@@ -90,6 +91,18 @@ async function createProduct(req, res, next) {
       imageUrl: normalizedImage.imageUrl,
     });
 
+    await registerAudit(req, {
+      action: 'producto_creado',
+      entity: 'producto',
+      entityId: product.id,
+      details: {
+        nombre: product.nombre,
+        categoria: product.categoria,
+        subcategoria: product.subcategoria,
+        codigoBarras: product.codigoBarras,
+      },
+    });
+
     return res.status(201).json(buildProductResponse(product, 'Producto creado correctamente'));
   } catch (error) {
     if (error?.code === '23505') {
@@ -132,6 +145,18 @@ async function updateProduct(req, res, next) {
       return res.status(404).json(buildMessageResponse('Producto no encontrado'));
     }
 
+    await registerAudit(req, {
+      action: 'producto_actualizado',
+      entity: 'producto',
+      entityId: product.id,
+      details: {
+        nombre: product.nombre,
+        categoria: product.categoria,
+        subcategoria: product.subcategoria,
+        codigoBarras: product.codigoBarras,
+      },
+    });
+
     return res.status(200).json(buildProductResponse(product, 'Producto actualizado correctamente'));
   } catch (error) {
     if (error?.code === '23505') {
@@ -149,6 +174,13 @@ async function deleteProduct(req, res, next) {
     if (!deleted) {
       return res.status(404).json(buildMessageResponse('Producto no encontrado'));
     }
+
+    await registerAudit(req, {
+      action: 'producto_eliminado',
+      entity: 'producto',
+      entityId: Number(req.params.id),
+      details: {},
+    });
 
     return res.status(200).json(buildProductMessageResponse('Producto eliminado correctamente'));
   } catch (error) {
@@ -176,6 +208,17 @@ async function adjustPricesByCategory(req, res, next) {
     if (!updatedProducts.length) {
       return res.status(404).json(buildMessageResponse('No hay productos para actualizar en esa categoria'));
     }
+
+    await registerAudit(req, {
+      action: 'precios_ajustados_por_categoria',
+      entity: 'categoria',
+      entityId: categoria.trim(),
+      details: {
+        categoria: categoria.trim(),
+        porcentaje: Number(porcentaje),
+        productosActualizados: updatedProducts.length,
+      },
+    });
 
     return res.status(200).json({
       ok: true,

@@ -1,4 +1,5 @@
 const budgetModel = require('../models/budget.model');
+const { registerAudit } = require('../utils/audit.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const { buildBudgetResponse, buildBudgetsResponse } = require('../views/budget.view');
 
@@ -128,6 +129,18 @@ async function createBudget(req, res, next) {
     }
 
     const budget = await budgetModel.findById(result.budgetId);
+    await registerAudit(req, {
+      action: 'presupuesto_creado',
+      entity: 'presupuesto',
+      entityId: result.budgetId,
+      details: {
+        clientId: req.body.clientId ? Number(req.body.clientId) : null,
+        total: budget?.total || null,
+        metodoPago: req.body.metodoPago.trim(),
+        items: req.body.items.length,
+        diasValidez: Number(req.body.diasValidez),
+      },
+    });
     return res.status(201).json(buildBudgetResponse(budget, 'Presupuesto creado correctamente'));
   } catch (error) {
     next(error);

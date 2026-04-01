@@ -1,3 +1,5 @@
+const logger = require('../utils/logger.util');
+
 function notFoundHandler(req, res, _next) {
   res.status(404).json({
     ok: false,
@@ -5,8 +7,16 @@ function notFoundHandler(req, res, _next) {
   });
 }
 
-function errorHandler(error, _req, res, _next) {
-  console.error(error);
+function errorHandler(error, req, res, _next) {
+  logger.error('request_failed', {
+    requestId: req.requestId || null,
+    method: req.method,
+    path: req.originalUrl,
+    ip: req.ip,
+    userId: req.user?.id || null,
+    error: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : null,
+  });
 
   if (error?.type === 'entity.too.large' || error?.status === 413) {
     return res.status(413).json({

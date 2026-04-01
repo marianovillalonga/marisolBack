@@ -1,4 +1,5 @@
 const saleModel = require('../models/sale.model');
+const { registerAudit } = require('../utils/audit.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const {
   buildSaleMessageResponse,
@@ -167,6 +168,18 @@ async function createSale(req, res, next) {
 
     const sale = await saleModel.findById(result.saleId);
 
+    await registerAudit(req, {
+      action: 'venta_creada',
+      entity: 'venta',
+      entityId: result.saleId,
+      details: {
+        clientId: req.body.clientId ? Number(req.body.clientId) : null,
+        total: sale?.total || null,
+        metodoPago: req.body.metodoPago.trim(),
+        items: req.body.items.length,
+      },
+    });
+
     return res.status(201).json(buildSaleResponse(sale, 'Venta registrada correctamente'));
   } catch (error) {
     next(error);
@@ -184,6 +197,13 @@ async function cancelSale(req, res, next) {
     if (result.error === 'ALREADY_CANCELLED') {
       return res.status(409).json(buildMessageResponse('La venta ya estaba anulada'));
     }
+
+    await registerAudit(req, {
+      action: 'venta_anulada',
+      entity: 'venta',
+      entityId: Number(req.params.id),
+      details: {},
+    });
 
     return res.status(200).json(buildSaleMessageResponse('Venta anulada correctamente'));
   } catch (error) {
