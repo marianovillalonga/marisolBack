@@ -10,16 +10,22 @@ class OrderModel {
       notas: row.notas,
       cantidadItems: Number(row.cantidad_items || 0),
       cantidadLineas: Number(row.cantidad_lineas || 0),
+      montoTotal: Number(row.monto_total || 0),
     };
   }
 
   mapOrderItem(row) {
+    const cantidad = Number(row.cantidad || 0);
+    const costoUnitario = Number(row.costo_unitario || 0);
+
     return {
       id: row.id,
       pedidoId: row.pedido_id,
       productoId: row.producto_id,
       productoNombre: row.producto_nombre,
-      cantidad: Number(row.cantidad || 0),
+      cantidad,
+      costoUnitario,
+      subtotal: Number(row.subtotal || cantidad * costoUnitario),
       stockAnterior: Number(row.stock_anterior || 0),
       stockActual: Number(row.stock_actual || 0),
     };
@@ -44,9 +50,15 @@ class OrderModel {
         producto_id INTEGER REFERENCES productos(id) ON DELETE SET NULL,
         producto_nombre VARCHAR(150) NOT NULL,
         cantidad INTEGER NOT NULL DEFAULT 1,
+        costo_unitario NUMERIC(12,2) NOT NULL DEFAULT 0,
         stock_anterior INTEGER NOT NULL DEFAULT 0,
         stock_actual INTEGER NOT NULL DEFAULT 0
       )
+    `);
+
+    await pool.query(`
+      ALTER TABLE pedido_detalles
+      ADD COLUMN IF NOT EXISTS costo_unitario NUMERIC(12,2) NOT NULL DEFAULT 0
     `);
 
     await pool.query(`
@@ -88,7 +100,8 @@ class OrderModel {
         p.fecha_pedido,
         p.notas,
         COALESCE(SUM(pd.cantidad), 0)::int AS cantidad_items,
-        COUNT(pd.id)::int AS cantidad_lineas
+        COUNT(pd.id)::int AS cantidad_lineas,
+        COALESCE(SUM(pd.cantidad * pd.costo_unitario), 0)::numeric(12,2) AS monto_total
       FROM pedidos p
       LEFT JOIN usuarios u ON u.id = p.usuario_id
       LEFT JOIN pedido_detalles pd ON pd.pedido_id = p.id
@@ -107,6 +120,7 @@ class OrderModel {
             OR CAST(p.id AS TEXT) LIKE REPLACE($1, '%', '')
             OR LOWER(COALESCE(u.nombre, '')) LIKE $1
             OR LOWER(COALESCE(p.notas, '')) LIKE $1
+            OR LOWER(COALESCE(pd.producto_nombre, '')) LIKE $1
           )
         GROUP BY p.id, u.nombre
         ORDER BY p.fecha_pedido DESC, p.id DESC
@@ -140,6 +154,8 @@ class OrderModel {
           producto_id,
           producto_nombre,
           cantidad,
+          costo_unitario,
+          (cantidad * costo_unitario)::numeric(12,2) AS subtotal,
           stock_anterior,
           stock_actual
         FROM pedido_detalles
@@ -187,26 +203,44 @@ class OrderModel {
       const orderId = orderRows[0].id;
 
       for (const item of items) {
-        const productResult = await client.query(
-          `
-            SELECT id, nombre, cantidad
-            FROM productos
-            WHERE id = $1
-            LIMIT 1
-            FOR UPDATE
-          `,
-          [item.productoId],
-        );
+        let productId = null;
+        let productName = item.productoNombre;
+        let stockAnterior = 0;
+        let stockActual = 0;
 
-        const product = productResult.rows[0];
+        if (item.productoId) {
+          const productResult = await client.query(
+            `
+              SELECT id, nombre, cantidad
+              FROM productos
+              WHERE id = $1
+              LIMIT 1
+              FOR UPDATE
+            `,
+            [item.productoId],
+          );
 
-        if (!product) {
-          await client.query('ROLLBACK');
-          return { error: 'PRODUCT_NOT_FOUND' };
+          const product = productResult.rows[0];
+
+          if (!product) {
+            await client.query('ROLLBACK');
+            return { error: 'PRODUCT_NOT_FOUND' };
+          }
+
+          productId = product.id;
+          productName = product.nombre;
+          stockAnterior = Number(product.cantidad || 0);
+          stockActual = stockAnterior + Number(item.cantidad);
+
+          await client.query(
+            `
+              UPDATE productos
+              SET cantidad = $2
+              WHERE id = $1
+            `,
+            [product.id, stockActual],
+          );
         }
-
-        const stockAnterior = Number(product.cantidad || 0);
-        const stockActual = stockAnterior + Number(item.cantidad);
 
         await client.query(
           `
@@ -215,21 +249,13 @@ class OrderModel {
               producto_id,
               producto_nombre,
               cantidad,
+              costo_unitario,
               stock_anterior,
               stock_actual
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
           `,
-          [orderId, product.id, product.nombre, item.cantidad, stockAnterior, stockActual],
-        );
-
-        await client.query(
-          `
-            UPDATE productos
-            SET cantidad = $2
-            WHERE id = $1
-          `,
-          [product.id, stockActual],
+          [orderId, productId, productName, item.cantidad, item.costoUnitario, stockAnterior, stockActual],
         );
       }
 

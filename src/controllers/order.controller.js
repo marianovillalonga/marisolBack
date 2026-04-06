@@ -16,12 +16,19 @@ function validateOrderInput({ fechaPedido, items }) {
   }
 
   for (const item of items) {
-    if (!item.productoId || Number.isNaN(Number(item.productoId))) {
-      return 'Cada item debe tener un producto valido';
+    const hasProduct = item.productoId && !Number.isNaN(Number(item.productoId));
+    const hasDescription = item.productoNombre && item.productoNombre.trim();
+
+    if (!hasProduct && !hasDescription) {
+      return 'Cada item debe tener un producto o una descripcion';
     }
 
     if (Number.isNaN(Number(item.cantidad)) || Number(item.cantidad) <= 0) {
       return 'La cantidad de cada item debe ser mayor a 0';
+    }
+
+    if (item.costoUnitario === undefined || Number.isNaN(Number(item.costoUnitario)) || Number(item.costoUnitario) < 0) {
+      return 'El costo de cada item debe ser mayor o igual a 0';
     }
   }
 
@@ -64,8 +71,10 @@ async function createOrder(req, res, next) {
       fechaPedido: req.body.fechaPedido,
       notas: req.body.notas?.trim?.() || '',
       items: req.body.items.map((item) => ({
-        productoId: Number(item.productoId),
+        productoId: item.productoId ? Number(item.productoId) : null,
+        productoNombre: item.productoNombre?.trim?.() || '',
         cantidad: Number(item.cantidad),
+        costoUnitario: Number(item.costoUnitario),
       })),
     });
 
@@ -87,6 +96,11 @@ async function createOrder(req, res, next) {
         items: req.body.items.length,
         cantidadTotal: req.body.items.reduce(
           (accumulator, item) => accumulator + Number(item.cantidad || 0),
+          0,
+        ),
+        montoTotal: req.body.items.reduce(
+          (accumulator, item) =>
+            accumulator + Number(item.cantidad || 0) * Number(item.costoUnitario || 0),
           0,
         ),
       },
