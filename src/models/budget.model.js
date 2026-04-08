@@ -49,6 +49,7 @@ class BudgetModel {
         descuento NUMERIC(12, 2) NOT NULL DEFAULT 0,
         total NUMERIC(12, 2) NOT NULL DEFAULT 0,
         metodo_pago VARCHAR(50) NOT NULL DEFAULT 'efectivo',
+        estado VARCHAR(30) NOT NULL DEFAULT 'confirmado',
         notas TEXT,
         fecha_emision TIMESTAMP NOT NULL DEFAULT NOW(),
         dias_validez INTEGER NOT NULL DEFAULT 10,
@@ -68,6 +69,11 @@ class BudgetModel {
         precio_unitario NUMERIC(12, 2) NOT NULL DEFAULT 0,
         subtotal NUMERIC(12, 2) NOT NULL DEFAULT 0
       )
+    `);
+
+    await pool.query(`
+      ALTER TABLE presupuestos
+      ADD COLUMN IF NOT EXISTS estado VARCHAR(30) NOT NULL DEFAULT 'confirmado'
     `);
 
     await pool.query(`
@@ -117,14 +123,11 @@ class BudgetModel {
         p.descuento,
         p.total,
         p.metodo_pago,
+        p.estado,
         p.notas,
         p.fecha_emision,
         p.dias_validez,
         p.fecha_vencimiento,
-        CASE
-          WHEN p.fecha_vencimiento < NOW() THEN 'vencido'
-          ELSE 'vigente'
-        END AS estado,
         COALESCE(SUM(pd.cantidad), 0)::int AS cantidad_items
       FROM presupuestos p
       LEFT JOIN clientes c ON c.id = p.cliente_id
@@ -151,10 +154,13 @@ class BudgetModel {
         HAVING (
           $2 = 'all'
           OR (
-            $2 = 'vigente' AND MAX(p.fecha_vencimiento) >= NOW()
+            $2 = 'en_progreso' AND MAX(p.estado) = 'en_progreso'
           )
           OR (
-            $2 = 'vencido' AND MAX(p.fecha_vencimiento) < NOW()
+            $2 = 'vigente' AND MAX(p.estado) <> 'en_progreso' AND MAX(p.fecha_vencimiento) >= NOW()
+          )
+          OR (
+            $2 = 'vencido' AND MAX(p.estado) <> 'en_progreso' AND MAX(p.fecha_vencimiento) < NOW()
           )
         )
         ORDER BY p.fecha_emision DESC, p.id DESC
@@ -162,7 +168,15 @@ class BudgetModel {
       [normalizedSearch, normalizedStatus],
     );
 
-    return rows.map((row) => this.mapBudget(row));
+    return rows.map((row) => ({
+      ...this.mapBudget(row),
+      estado:
+        row.estado === 'en_progreso'
+          ? 'en_progreso'
+          : new Date(row.fecha_vencimiento).getTime() < Date.now()
+            ? 'vencido'
+            : 'vigente',
+    }));
   }
 
   async findById(id) {
@@ -198,9 +212,307 @@ class BudgetModel {
     );
 
     return {
-      ...this.mapBudget(budgetResult.rows[0]),
+      ...this.mapBudget({
+        ...budgetResult.rows[0],
+        estado:
+          budgetResult.rows[0].estado === 'en_progreso'
+            ? 'en_progreso'
+            : new Date(budgetResult.rows[0].fecha_vencimiento).getTime() < Date.now()
+              ? 'vencido'
+              : 'vigente',
+      }),
       items: itemsResult.rows.map((row) => this.mapBudgetItem(row)),
     };
+  }
+
+  async resolveBudgetContext(client, { clientId, sellerId }) {
+    let customer = null;
+
+    if (clientId) {
+      const customerResult = await client.query(
+        'SELECT id, nombre FROM clientes WHERE id = $1 LIMIT 1',
+        [clientId],
+      );
+      customer = customerResult.rows[0];
+
+      if (!customer) {
+        return { error: 'CLIENT_NOT_FOUND' };
+      }
+    }
+
+    const sellerResult = await client.query(
+      'SELECT id, nombre FROM usuarios WHERE id = $1 LIMIT 1',
+      [sellerId],
+    );
+
+    if (!sellerResult.rows[0]) {
+      return { error: 'SELLER_NOT_FOUND' };
+    }
+
+    return { customer, seller: sellerResult.rows[0] };
+  }
+
+  async buildBudgetItemSnapshots(client, items) {
+    const itemSnapshots = [];
+
+    for (const item of items) {
+      if (item.productoId) {
+        const productResult = await client.query(
+          'SELECT id, nombre FROM productos WHERE id = $1 LIMIT 1',
+          [item.productoId],
+        );
+
+        const product = productResult.rows[0];
+
+        if (!product) {
+          return { error: 'PRODUCT_NOT_FOUND' };
+        }
+
+        itemSnapshots.push({
+          productoId: product.id,
+          productoNombre: product.nombre,
+          cantidad: item.cantidad,
+          precioUnitario: item.precioUnitario,
+          subtotal: Number(item.cantidad) * Number(item.precioUnitario),
+        });
+        continue;
+      }
+
+      itemSnapshots.push({
+        productoId: null,
+        productoNombre: item.productoNombre,
+        cantidad: item.cantidad,
+        precioUnitario: item.precioUnitario,
+        subtotal: Number(item.cantidad) * Number(item.precioUnitario),
+      });
+    }
+
+    return { itemSnapshots };
+  }
+
+  async upsertBudgetDetails(client, budgetId, itemSnapshots) {
+    await client.query('DELETE FROM presupuesto_detalles WHERE presupuesto_id = $1', [budgetId]);
+
+    for (const item of itemSnapshots) {
+      await client.query(
+        `
+          INSERT INTO presupuesto_detalles (
+            presupuesto_id,
+            producto_id,
+            producto_nombre,
+            cantidad,
+            precio_unitario,
+            subtotal
+          )
+          VALUES ($1, $2, $3, $4, $5, $6)
+        `,
+        [
+          budgetId,
+          item.productoId,
+          item.productoNombre,
+          item.cantidad,
+          item.precioUnitario,
+          item.subtotal,
+        ],
+      );
+    }
+  }
+
+  async saveDraftBudget({
+    budgetId,
+    clientId,
+    sellerId,
+    descuento,
+    ajusteMetodoPago = 0,
+    ajusteMetodoPagoTipo = null,
+    ajusteMetodoPagoPorcentaje = 0,
+    metodoPago,
+    notas,
+    fechaEmision,
+    diasValidez,
+    items,
+  }) {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const context = await this.resolveBudgetContext(client, { clientId, sellerId });
+      if (context.error) {
+        await client.query('ROLLBACK');
+        return context;
+      }
+
+      if (budgetId) {
+        const existingBudgetResult = await client.query(
+          'SELECT id, estado FROM presupuestos WHERE id = $1 LIMIT 1 FOR UPDATE',
+          [budgetId],
+        );
+
+        if (!existingBudgetResult.rows[0]) {
+          await client.query('ROLLBACK');
+          return { error: 'NOT_FOUND' };
+        }
+
+        if (existingBudgetResult.rows[0].estado !== 'en_progreso') {
+          await client.query('ROLLBACK');
+          return { error: 'INVALID_STATE' };
+        }
+      }
+
+      const snapshotResult = await this.buildBudgetItemSnapshots(client, items);
+      if (snapshotResult.error) {
+        await client.query('ROLLBACK');
+        return snapshotResult;
+      }
+
+      const { itemSnapshots } = snapshotResult;
+      const subtotal = itemSnapshots.reduce((acc, item) => acc + item.subtotal, 0);
+      const total = subtotal + ajusteMetodoPago - descuento;
+      const fechaVencimiento = addDaysToDate(fechaEmision, diasValidez);
+      let resolvedBudgetId = budgetId;
+
+      if (resolvedBudgetId) {
+        await client.query(
+          `
+            UPDATE presupuestos
+            SET
+              cliente_id = $2,
+              vendedor_id = $3,
+              subtotal = $4,
+              ajuste_metodo_pago = $5,
+              ajuste_metodo_pago_tipo = $6,
+              ajuste_metodo_pago_porcentaje = $7,
+              descuento = $8,
+              total = $9,
+              metodo_pago = $10,
+              estado = 'en_progreso',
+              notas = $11,
+              fecha_emision = $12,
+              dias_validez = $13,
+              fecha_vencimiento = $14
+            WHERE id = $1
+          `,
+          [
+            resolvedBudgetId,
+            context.customer?.id || null,
+            sellerId,
+            subtotal,
+            ajusteMetodoPago,
+            ajusteMetodoPagoTipo,
+            ajusteMetodoPagoPorcentaje,
+            descuento,
+            total,
+            metodoPago,
+            notas || null,
+            fechaEmision,
+            diasValidez,
+            fechaVencimiento,
+          ],
+        );
+      } else {
+        const budgetResult = await client.query(
+          `
+            INSERT INTO presupuestos (
+              cliente_id,
+              vendedor_id,
+              subtotal,
+              ajuste_metodo_pago,
+              ajuste_metodo_pago_tipo,
+              ajuste_metodo_pago_porcentaje,
+              descuento,
+              total,
+              metodo_pago,
+              estado,
+              notas,
+              fecha_emision,
+              dias_validez,
+              fecha_vencimiento
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'en_progreso', $10, $11, $12, $13)
+            RETURNING id
+          `,
+          [
+            context.customer?.id || null,
+            sellerId,
+            subtotal,
+            ajusteMetodoPago,
+            ajusteMetodoPagoTipo,
+            ajusteMetodoPagoPorcentaje,
+            descuento,
+            total,
+            metodoPago,
+            notas || null,
+            fechaEmision,
+            diasValidez,
+            fechaVencimiento,
+          ],
+        );
+        resolvedBudgetId = budgetResult.rows[0].id;
+      }
+
+      await this.upsertBudgetDetails(client, resolvedBudgetId, itemSnapshots);
+
+      await client.query('COMMIT');
+      return { budgetId: resolvedBudgetId };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async confirmDraftBudget({ budgetId, sellerId }) {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const budgetResult = await client.query(
+        'SELECT id, cliente_id, estado FROM presupuestos WHERE id = $1 LIMIT 1 FOR UPDATE',
+        [budgetId],
+      );
+      const budget = budgetResult.rows[0];
+
+      if (!budget) {
+        await client.query('ROLLBACK');
+        return { error: 'NOT_FOUND' };
+      }
+
+      if (budget.estado !== 'en_progreso') {
+        await client.query('ROLLBACK');
+        return { error: 'INVALID_STATE' };
+      }
+
+      const context = await this.resolveBudgetContext(client, {
+        clientId: budget.cliente_id ? Number(budget.cliente_id) : null,
+        sellerId,
+      });
+      if (context.error) {
+        await client.query('ROLLBACK');
+        return context;
+      }
+
+      await client.query(
+        `
+          UPDATE presupuestos
+          SET
+            vendedor_id = $2,
+            estado = 'confirmado'
+          WHERE id = $1
+        `,
+        [budgetId, sellerId],
+      );
+
+      await client.query('COMMIT');
+      return { budgetId };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async createBudget({

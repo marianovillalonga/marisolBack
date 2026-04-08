@@ -265,20 +265,345 @@ class OrderModel {
       : this.createSupplierOrder(payload);
   }
 
+  async ensureUserExists(client, userId) {
+    const userResult = await client.query(
+      'SELECT id FROM usuarios WHERE id = $1 LIMIT 1',
+      [userId],
+    );
+
+    return userResult.rows[0] ? { ok: true } : { error: 'USER_NOT_FOUND' };
+  }
+
+  buildOrderItemSnapshots(items) {
+    return items.map((item) => ({
+      productoId: item.productoId || null,
+      productoNombre: item.productoNombre,
+      cantidad: Number(item.cantidad),
+      costoUnitario: Number(item.costoUnitario),
+    }));
+  }
+
+  async upsertOrderDetails(client, orderId, itemSnapshots) {
+    await client.query('DELETE FROM pedido_detalles WHERE pedido_id = $1', [orderId]);
+
+    for (const item of itemSnapshots) {
+      await client.query(
+        `
+          INSERT INTO pedido_detalles (
+            pedido_id,
+            producto_id,
+            producto_nombre,
+            cantidad,
+            costo_unitario,
+            stock_anterior,
+            stock_actual
+          )
+          VALUES ($1, $2, $3, $4, $5, 0, 0)
+        `,
+        [orderId, item.productoId, item.productoNombre, item.cantidad, item.costoUnitario],
+      );
+    }
+  }
+
+  async saveDraftOrder(payload) {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const userStatus = await this.ensureUserExists(client, payload.userId);
+      if (userStatus.error) {
+        await client.query('ROLLBACK');
+        return userStatus;
+      }
+
+      if (payload.orderId) {
+        const existingOrderResult = await client.query(
+          'SELECT id, estado FROM pedidos WHERE id = $1 LIMIT 1 FOR UPDATE',
+          [payload.orderId],
+        );
+
+        if (!existingOrderResult.rows[0]) {
+          await client.query('ROLLBACK');
+          return { error: 'NOT_FOUND' };
+        }
+
+        if (existingOrderResult.rows[0].estado !== 'en_progreso') {
+          await client.query('ROLLBACK');
+          return { error: 'INVALID_STATE' };
+        }
+      }
+
+      const itemSnapshots = this.buildOrderItemSnapshots(payload.items);
+      const montoTotal = roundToTwo(
+        itemSnapshots.reduce(
+          (accumulator, item) => accumulator + item.cantidad * item.costoUnitario,
+          0,
+        ),
+      );
+      const safeMontoEntregado = roundToTwo(payload.tipo === 'cliente' ? payload.montoEntregado || 0 : 0);
+      const saldoPendiente = roundToTwo(Math.max(montoTotal - safeMontoEntregado, 0));
+      let resolvedOrderId = payload.orderId;
+
+      if (resolvedOrderId) {
+        await client.query(
+          `
+            UPDATE pedidos
+            SET
+              usuario_id = $2,
+              tipo = $3,
+              estado = 'en_progreso',
+              fecha_pedido = $4,
+              fecha_evento = $5,
+              fecha_entrega = $6,
+              cliente_nombre = $7,
+              cliente_telefono = $8,
+              agasajado_nombre = $9,
+              edad_agasajado = $10,
+              tematica = $11,
+              monto_entregado = $12,
+              saldo_pendiente = $13,
+              metodo_pago = NULL,
+              venta_id = NULL,
+              notas = $14
+            WHERE id = $1
+          `,
+          [
+            resolvedOrderId,
+            payload.userId,
+            payload.tipo,
+            payload.fechaPedido,
+            payload.tipo === 'cliente' ? payload.fechaEvento : null,
+            payload.tipo === 'cliente' ? payload.fechaEntrega : null,
+            payload.tipo === 'cliente' ? payload.clienteNombre || null : null,
+            payload.tipo === 'cliente' ? payload.clienteTelefono || null : null,
+            payload.tipo === 'cliente' ? payload.agasajadoNombre || null : null,
+            payload.tipo === 'cliente' ? payload.edadAgasajado : null,
+            payload.tipo === 'cliente' ? payload.tematica || null : null,
+            safeMontoEntregado,
+            saldoPendiente,
+            payload.notas || null,
+          ],
+        );
+      } else {
+        const orderResult = await client.query(
+          `
+            INSERT INTO pedidos (
+              usuario_id,
+              tipo,
+              estado,
+              fecha_pedido,
+              fecha_evento,
+              fecha_entrega,
+              cliente_nombre,
+              cliente_telefono,
+              agasajado_nombre,
+              edad_agasajado,
+              tematica,
+              monto_entregado,
+              saldo_pendiente,
+              notas
+            )
+            VALUES ($1, $2, 'en_progreso', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            RETURNING id
+          `,
+          [
+            payload.userId,
+            payload.tipo,
+            payload.fechaPedido,
+            payload.tipo === 'cliente' ? payload.fechaEvento : null,
+            payload.tipo === 'cliente' ? payload.fechaEntrega : null,
+            payload.tipo === 'cliente' ? payload.clienteNombre || null : null,
+            payload.tipo === 'cliente' ? payload.clienteTelefono || null : null,
+            payload.tipo === 'cliente' ? payload.agasajadoNombre || null : null,
+            payload.tipo === 'cliente' ? payload.edadAgasajado : null,
+            payload.tipo === 'cliente' ? payload.tematica || null : null,
+            safeMontoEntregado,
+            saldoPendiente,
+            payload.notas || null,
+          ],
+        );
+        resolvedOrderId = orderResult.rows[0].id;
+      }
+
+      await this.upsertOrderDetails(client, resolvedOrderId, itemSnapshots);
+
+      await client.query('COMMIT');
+      return { orderId: resolvedOrderId };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async confirmDraftOrder({ orderId, userId }) {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const userStatus = await this.ensureUserExists(client, userId);
+      if (userStatus.error) {
+        await client.query('ROLLBACK');
+        return userStatus;
+      }
+
+      const orderResult = await client.query(
+        `
+          SELECT *
+          FROM pedidos
+          WHERE id = $1
+          LIMIT 1
+          FOR UPDATE
+        `,
+        [orderId],
+      );
+
+      const order = orderResult.rows[0];
+
+      if (!order) {
+        await client.query('ROLLBACK');
+        return { error: 'NOT_FOUND' };
+      }
+
+      if (order.estado !== 'en_progreso') {
+        await client.query('ROLLBACK');
+        return { error: 'INVALID_STATE' };
+      }
+
+      const detailsResult = await client.query(
+        `
+          SELECT producto_id, producto_nombre, cantidad, costo_unitario
+          FROM pedido_detalles
+          WHERE pedido_id = $1
+          ORDER BY id ASC
+        `,
+        [orderId],
+      );
+
+      const items = detailsResult.rows.map((item) => ({
+        productoId: item.producto_id ? Number(item.producto_id) : null,
+        productoNombre: item.producto_nombre,
+        cantidad: Number(item.cantidad),
+        costoUnitario: Number(item.costo_unitario),
+      }));
+
+      if (order.tipo === 'proveedor') {
+        await client.query('DELETE FROM pedido_detalles WHERE pedido_id = $1', [orderId]);
+
+        for (const item of items) {
+          let productId = null;
+          let productName = item.productoNombre;
+          let stockAnterior = 0;
+          let stockActual = 0;
+
+          if (item.productoId) {
+            const productResult = await client.query(
+              `
+                SELECT id, nombre, cantidad
+                FROM productos
+                WHERE id = $1
+                LIMIT 1
+                FOR UPDATE
+              `,
+              [item.productoId],
+            );
+
+            const product = productResult.rows[0];
+
+            if (!product) {
+              await client.query('ROLLBACK');
+              return { error: 'PRODUCT_NOT_FOUND' };
+            }
+
+            productId = product.id;
+            productName = product.nombre;
+            stockAnterior = Number(product.cantidad || 0);
+            stockActual = stockAnterior + Number(item.cantidad);
+
+            await client.query(
+              `
+                UPDATE productos
+                SET cantidad = $2
+                WHERE id = $1
+              `,
+              [product.id, stockActual],
+            );
+          }
+
+          await client.query(
+            `
+              INSERT INTO pedido_detalles (
+                pedido_id,
+                producto_id,
+                producto_nombre,
+                cantidad,
+                costo_unitario,
+                stock_anterior,
+                stock_actual
+              )
+              VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `,
+            [orderId, productId, productName, item.cantidad, item.costoUnitario, stockAnterior, stockActual],
+          );
+        }
+
+        await client.query(
+          `
+            UPDATE pedidos
+            SET
+              usuario_id = $2,
+              estado = 'registrado'
+            WHERE id = $1
+          `,
+          [orderId, userId],
+        );
+      } else {
+        const montoTotal = roundToTwo(
+          items.reduce(
+            (accumulator, item) => accumulator + item.cantidad * item.costoUnitario,
+            0,
+          ),
+        );
+        const safeMontoEntregado = roundToTwo(order.monto_entregado || 0);
+        const saldoPendiente = roundToTwo(Math.max(montoTotal - safeMontoEntregado, 0));
+
+        await client.query(
+          `
+            UPDATE pedidos
+            SET
+              usuario_id = $2,
+              estado = 'pendiente',
+              saldo_pendiente = $3
+            WHERE id = $1
+          `,
+          [orderId, userId, saldoPendiente],
+        );
+      }
+
+      await client.query('COMMIT');
+      return { orderId };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async createSupplierOrder({ userId, fechaPedido, notas, items }) {
     const client = await pool.connect();
 
     try {
       await client.query('BEGIN');
 
-      const userResult = await client.query(
-        'SELECT id FROM usuarios WHERE id = $1 LIMIT 1',
-        [userId],
-      );
+      const userStatus = await this.ensureUserExists(client, userId);
 
-      if (!userResult.rows[0]) {
+      if (userStatus.error) {
         await client.query('ROLLBACK');
-        return { error: 'USER_NOT_FOUND' };
+        return userStatus;
       }
 
       const { rows: orderRows } = await client.query(
@@ -384,14 +709,11 @@ class OrderModel {
     try {
       await client.query('BEGIN');
 
-      const userResult = await client.query(
-        'SELECT id FROM usuarios WHERE id = $1 LIMIT 1',
-        [userId],
-      );
+      const userStatus = await this.ensureUserExists(client, userId);
 
-      if (!userResult.rows[0]) {
+      if (userStatus.error) {
         await client.query('ROLLBACK');
-        return { error: 'USER_NOT_FOUND' };
+        return userStatus;
       }
 
       const itemSnapshots = [];

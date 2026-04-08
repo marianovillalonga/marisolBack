@@ -210,6 +210,137 @@ async function createSale(req, res, next) {
   }
 }
 
+async function saveDraftSale(req, res, next) {
+  try {
+    const validationError = validateSaleInput(req.body);
+
+    if (validationError) {
+      return res.status(400).json(buildMessageResponse(validationError));
+    }
+
+    const normalizedPayments = Array.isArray(req.body.pagos)
+      ? req.body.pagos
+          .map((pago) => ({
+            metodo: pago?.metodo?.trim?.() || '',
+            monto: Number(pago?.monto || 0),
+          }))
+          .filter((pago) => pago.metodo && pago.monto > 0)
+      : [];
+
+    const result = await saleModel.saveDraftSale({
+      saleId: req.body.saleId ? Number(req.body.saleId) : null,
+      clientId: req.body.clientId ? Number(req.body.clientId) : null,
+      sellerId: req.user.id,
+      descuento: Number(req.body.descuento),
+      montoPagado: Number(req.body.montoPagado),
+      notas: req.body.notas?.trim() || '',
+      fechaVenta: req.body.fechaVenta,
+      pagos: normalizedPayments,
+      items: req.body.items.map((item) => ({
+        productoId: item.productoId ? Number(item.productoId) : null,
+        productoNombre: item.productoNombre?.trim?.() || '',
+        cantidad: Number(item.cantidad),
+        precioUnitario: Number(item.precioUnitario),
+      })),
+    });
+
+    if (result.error === 'CLIENT_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Cliente no encontrado'));
+    }
+
+    if (result.error === 'SELLER_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Usuario vendedor no encontrado'));
+    }
+
+    if (result.error === 'NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Borrador de venta no encontrado'));
+    }
+
+    if (result.error === 'INVALID_STATE') {
+      return res.status(409).json(buildMessageResponse('Solo se pueden editar ventas en progreso'));
+    }
+
+    const sale = await saleModel.findById(result.saleId);
+
+    await registerAudit(req, {
+      action: req.body.saleId ? 'venta_borrador_actualizada' : 'venta_borrador_creada',
+      entity: 'venta',
+      entityId: result.saleId,
+      details: {
+        clientId: req.body.clientId ? Number(req.body.clientId) : null,
+        total: sale?.total || null,
+        items: req.body.items.length,
+      },
+    });
+
+    return res.status(req.body.saleId ? 200 : 201).json(buildSaleResponse(sale, 'Borrador guardado correctamente'));
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function confirmDraftSale(req, res, next) {
+  try {
+    const result = await saleModel.confirmDraftSale({
+      saleId: Number(req.params.id),
+      sellerId: req.user.id,
+    });
+
+    if (result.error === 'NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Borrador de venta no encontrado'));
+    }
+
+    if (result.error === 'INVALID_STATE') {
+      return res.status(409).json(buildMessageResponse('Solo se pueden confirmar ventas en progreso'));
+    }
+
+    if (result.error === 'SELLER_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Usuario vendedor no encontrado'));
+    }
+
+    if (result.error === 'CLIENT_REQUIRED_FOR_BALANCE') {
+      return res.status(400).json(
+        buildMessageResponse('Para dejar saldo pendiente debes seleccionar un cliente'),
+      );
+    }
+
+    if (result.error === 'PRODUCT_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Uno de los productos no existe'));
+    }
+
+    if (result.error === 'INSUFFICIENT_STOCK') {
+      return res.status(409).json(
+        buildMessageResponse(
+          `Stock insuficiente para ${result.productName}. Disponible: ${result.availableStock}`,
+        ),
+      );
+    }
+
+    if (result.error === 'INVALID_PAYMENT_SPLIT') {
+      return res.status(400).json(
+        buildMessageResponse('Los pagos informados superan el subtotal cubierto de la venta'),
+      );
+    }
+
+    const sale = await saleModel.findById(result.saleId);
+
+    await registerAudit(req, {
+      action: 'venta_borrador_confirmada',
+      entity: 'venta',
+      entityId: result.saleId,
+      details: {
+        total: sale?.total || null,
+        metodoPago: sale?.metodoPago || null,
+        items: sale?.items?.length || 0,
+      },
+    });
+
+    return res.status(200).json(buildSaleResponse(sale, 'Venta confirmada correctamente'));
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function cancelSale(req, res, next) {
   try {
     const result = await saleModel.cancelSale(Number(req.params.id));
@@ -240,5 +371,7 @@ module.exports = {
   getSalesSummary,
   getSaleById,
   createSale,
+  saveDraftSale,
+  confirmDraftSale,
   cancelSale,
 };

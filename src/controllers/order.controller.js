@@ -203,6 +203,116 @@ async function createOrder(req, res, next) {
   }
 }
 
+async function saveDraftOrder(req, res, next) {
+  try {
+    const validationError = validateOrderInput(req.body);
+
+    if (validationError) {
+      return res.status(400).json(buildMessageResponse(validationError));
+    }
+
+    const tipo = req.body.tipo === 'cliente' ? 'cliente' : 'proveedor';
+    const result = await orderModel.saveDraftOrder({
+      orderId: req.body.orderId ? Number(req.body.orderId) : null,
+      userId: req.user.id,
+      tipo,
+      fechaPedido: req.body.fechaPedido,
+      fechaEvento: req.body.fechaEvento || null,
+      fechaEntrega: req.body.fechaEntrega || null,
+      clienteNombre: req.body.clienteNombre?.trim?.() || '',
+      clienteTelefono: req.body.clienteTelefono?.trim?.() || '',
+      agasajadoNombre: req.body.agasajadoNombre?.trim?.() || '',
+      edadAgasajado:
+        req.body.edadAgasajado === undefined || req.body.edadAgasajado === null || req.body.edadAgasajado === ''
+          ? null
+          : Number(req.body.edadAgasajado),
+      tematica: req.body.tematica?.trim?.() || '',
+      montoEntregado: Number(req.body.montoEntregado || 0),
+      notas: req.body.notas?.trim?.() || '',
+      items: req.body.items.map((item) => ({
+        productoId: item.productoId ? Number(item.productoId) : null,
+        productoNombre: item.productoNombre?.trim?.() || '',
+        cantidad: Number(item.cantidad),
+        costoUnitario: Number(item.costoUnitario),
+      })),
+    });
+
+    if (result.error === 'USER_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Usuario no encontrado'));
+    }
+
+    if (result.error === 'PRODUCT_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Uno de los productos no existe'));
+    }
+
+    if (result.error === 'NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Borrador de pedido no encontrado'));
+    }
+
+    if (result.error === 'INVALID_STATE') {
+      return res.status(409).json(buildMessageResponse('Solo se pueden editar pedidos en progreso'));
+    }
+
+    const order = await orderModel.findById(result.orderId);
+
+    await registerAudit(req, {
+      action: req.body.orderId ? 'pedido_borrador_actualizado' : 'pedido_borrador_creado',
+      entity: 'pedido',
+      entityId: result.orderId,
+      details: {
+        tipo,
+        estado: order?.estado || null,
+        items: req.body.items.length,
+      },
+    });
+
+    return res.status(req.body.orderId ? 200 : 201).json(buildOrderResponse(order, 'Borrador guardado correctamente'));
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function confirmDraftOrder(req, res, next) {
+  try {
+    const result = await orderModel.confirmDraftOrder({
+      orderId: Number(req.params.id),
+      userId: req.user.id,
+    });
+
+    if (result.error === 'NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Borrador de pedido no encontrado'));
+    }
+
+    if (result.error === 'INVALID_STATE') {
+      return res.status(409).json(buildMessageResponse('Solo se pueden confirmar pedidos en progreso'));
+    }
+
+    if (result.error === 'USER_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Usuario no encontrado'));
+    }
+
+    if (result.error === 'PRODUCT_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Uno de los productos no existe'));
+    }
+
+    const order = await orderModel.findById(result.orderId);
+
+    await registerAudit(req, {
+      action: 'pedido_borrador_confirmado',
+      entity: 'pedido',
+      entityId: result.orderId,
+      details: {
+        tipo: order?.tipo || null,
+        estado: order?.estado || null,
+      },
+    });
+
+    return res.status(200).json(buildOrderResponse(order, 'Pedido confirmado correctamente'));
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function updateCustomerOrder(req, res, next) {
   try {
     const result = await orderModel.updateCustomerOrder({
@@ -269,5 +379,7 @@ module.exports = {
   listOrders,
   getOrderById,
   createOrder,
+  saveDraftOrder,
+  confirmDraftOrder,
   updateCustomerOrder,
 };
