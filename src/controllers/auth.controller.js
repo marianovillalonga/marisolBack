@@ -8,6 +8,7 @@ const {
   buildLogoutResponse,
   buildMessageResponse,
 } = require('../views/auth.view');
+const { isValidEmail } = require('../utils/validation.util');
 
 async function login(req, res, next) {
   try {
@@ -15,6 +16,10 @@ async function login(req, res, next) {
 
     if (!email || !password) {
       return res.status(400).json(buildMessageResponse('Email y password son obligatorios'));
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json(buildMessageResponse('El email no es valido'));
     }
 
     const user = await userModel.validateCredentials(email, password);

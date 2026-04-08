@@ -5,10 +5,7 @@ const {
   buildClientResponse,
   buildClientsResponse,
 } = require('../views/client.view');
-
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
+const { isPositiveInteger, isValidEmail } = require('../utils/validation.util');
 
 function validateClientInput({ nombre, email, limiteCredito }) {
   if (!nombre || !nombre.trim()) {
@@ -31,6 +28,10 @@ function validateClientInput({ nombre, email, limiteCredito }) {
 }
 
 function validatePurchaseInput({ productoId, productoNombre, cantidad, precioUnitario, montoPagado, fechaCompra }) {
+  if (productoId !== undefined && productoId !== null && productoId !== '' && !isPositiveInteger(productoId)) {
+    return 'El producto seleccionado no es valido';
+  }
+
   if (!productoId && (!productoNombre || !productoNombre.trim())) {
     return 'Debes indicar un producto para registrar la compra';
   }

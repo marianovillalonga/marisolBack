@@ -15,6 +15,14 @@ const isProduction = process.env.NODE_ENV === 'production';
 const DB_SSL = process.env.DB_SSL;
 const DB_SSL_REJECT_UNAUTHORIZED = process.env.DB_SSL_REJECT_UNAUTHORIZED;
 
+function isHttpsUrl(url) {
+  try {
+    return new URL(url).protocol === 'https:';
+  } catch (_error) {
+    return false;
+  }
+}
+
 function validateRuntimeConfig() {
   const issues = [];
 
@@ -36,6 +44,10 @@ function validateRuntimeConfig() {
 
   if (isProduction && DB_SSL_REJECT_UNAUTHORIZED === 'false') {
     issues.push('DB_SSL_REJECT_UNAUTHORIZED=false solo deberia usarse temporalmente fuera de produccion');
+  }
+
+  if (isProduction && FRONTEND_URLS.some((url) => !isHttpsUrl(url))) {
+    issues.push('FRONTEND_URLS debe usar https en produccion');
   }
 
   if (issues.length) {

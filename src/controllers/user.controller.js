@@ -1,11 +1,16 @@
 const userModel = require('../models/user.model');
 const { hashPassword } = require('../utils/hash.util');
 const { buildMessageResponse } = require('../views/auth.view');
+const { isNonEmptyString, isPositiveInteger, isValidEmail } = require('../utils/validation.util');
 const {
   buildCreateUserResponse,
   buildPasswordUpdatedResponse,
   buildProfileUpdatedResponse,
 } = require('../views/user.view');
+
+function isValidPassword(password) {
+  return typeof password === 'string' && password.length >= 8;
+}
 
 async function createUser(req, res, next) {
   try {
@@ -21,19 +26,27 @@ async function createUser(req, res, next) {
     } =
       req.body;
 
-    if (!name || !email || !password) {
+    if (!isNonEmptyString(name) || !isNonEmptyString(email) || !isNonEmptyString(password)) {
       return res.status(400).json(buildMessageResponse('Name, email y password son obligatorios'));
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json(buildMessageResponse('El email no es valido'));
+    }
+
+    if (!isValidPassword(password)) {
+      return res.status(400).json(buildMessageResponse('La password debe tener al menos 8 caracteres'));
     }
 
     const passwordHash = await hashPassword(password);
     const result = await userModel.createUser({
-      name,
-      email,
+      name: name.trim(),
+      email: email.trim(),
       passwordHash,
       roleName: role,
-      phone,
-      address,
-      avatarUrl,
+      phone: String(phone || '').trim(),
+      address: String(address || '').trim(),
+      avatarUrl: String(avatarUrl || '').trim(),
       paymentMethodSettings,
     });
 
@@ -55,17 +68,21 @@ async function updateProfile(req, res, next) {
   try {
     const { name, email, phone = '', address = '', avatarUrl = '', paymentMethodSettings = {} } = req.body;
 
-    if (!name || !email) {
+    if (!isNonEmptyString(name) || !isNonEmptyString(email)) {
       return res.status(400).json(buildMessageResponse('Nombre y email son obligatorios'));
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json(buildMessageResponse('El email no es valido'));
     }
 
     const result = await userModel.updateProfile({
       userId: req.user.id,
-      name,
-      email,
-      phone,
-      address,
-      avatarUrl,
+      name: name.trim(),
+      email: email.trim(),
+      phone: String(phone || '').trim(),
+      address: String(address || '').trim(),
+      avatarUrl: String(avatarUrl || '').trim(),
       paymentMethodSettings,
     });
 
@@ -91,8 +108,8 @@ async function updatePassword(req, res, next) {
       return res.status(400).json(buildMessageResponse('Todos los campos de password son obligatorios'));
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json(buildMessageResponse('La nueva password debe tener al menos 6 caracteres'));
+    if (!isValidPassword(newPassword)) {
+      return res.status(400).json(buildMessageResponse('La nueva password debe tener al menos 8 caracteres'));
     }
 
     if (newPassword !== confirmPassword) {
@@ -137,21 +154,25 @@ async function updateUserByAdmin(req, res, next) {
     const userId = Number(req.params.id);
     const { name, email, phone = '', address = '', role, active = true } = req.body;
 
-    if (!userId) {
+    if (!isPositiveInteger(userId)) {
       return res.status(400).json(buildMessageResponse('Usuario invalido'));
     }
 
-    if (!name || !email || !role) {
+    if (!isNonEmptyString(name) || !isNonEmptyString(email) || !isNonEmptyString(role)) {
       return res.status(400).json(buildMessageResponse('Nombre, email y rol son obligatorios'));
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json(buildMessageResponse('El email no es valido'));
     }
 
     const result = await userModel.updateUserByAdmin({
       userId,
-      name,
-      email,
-      phone,
-      address,
-      roleName: role,
+      name: name.trim(),
+      email: email.trim(),
+      phone: String(phone || '').trim(),
+      address: String(address || '').trim(),
+      roleName: role.trim(),
       active: Boolean(active),
     });
 
@@ -181,7 +202,7 @@ async function blockUser(req, res, next) {
   try {
     const userId = Number(req.params.id);
 
-    if (!userId) {
+    if (!isPositiveInteger(userId)) {
       return res.status(400).json(buildMessageResponse('Usuario invalido'));
     }
 
@@ -212,7 +233,7 @@ async function unblockUser(req, res, next) {
   try {
     const userId = Number(req.params.id);
 
-    if (!userId) {
+    if (!isPositiveInteger(userId)) {
       return res.status(400).json(buildMessageResponse('Usuario invalido'));
     }
 
