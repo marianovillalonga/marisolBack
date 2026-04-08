@@ -6,7 +6,7 @@ const {
   buildOrdersResponse,
 } = require('../views/order.view');
 
-function validateOrderInput({ fechaPedido, items }) {
+function validateProviderOrderInput({ fechaPedido, items }) {
   if (!fechaPedido || Number.isNaN(Date.parse(fechaPedido))) {
     return 'La fecha del pedido es obligatoria';
   }
@@ -27,12 +27,88 @@ function validateOrderInput({ fechaPedido, items }) {
       return 'La cantidad de cada item debe ser mayor a 0';
     }
 
-    if (item.costoUnitario === undefined || Number.isNaN(Number(item.costoUnitario)) || Number(item.costoUnitario) < 0) {
+    if (
+      item.costoUnitario === undefined ||
+      Number.isNaN(Number(item.costoUnitario)) ||
+      Number(item.costoUnitario) < 0
+    ) {
       return 'El costo de cada item debe ser mayor o igual a 0';
     }
   }
 
   return null;
+}
+
+function validateCustomerOrderInput({
+  fechaPedido,
+  fechaEvento,
+  fechaEntrega,
+  clienteNombre,
+  agasajadoNombre,
+  edadAgasajado,
+  montoEntregado = 0,
+  items,
+}) {
+  if (!fechaPedido || Number.isNaN(Date.parse(fechaPedido))) {
+    return 'La fecha del pedido es obligatoria';
+  }
+
+  if (!fechaEvento || Number.isNaN(Date.parse(fechaEvento))) {
+    return 'La fecha del evento es obligatoria';
+  }
+
+  if (!fechaEntrega || Number.isNaN(Date.parse(fechaEntrega))) {
+    return 'La fecha de entrega es obligatoria';
+  }
+
+  if (!clienteNombre || !clienteNombre.trim()) {
+    return 'El nombre del cliente es obligatorio';
+  }
+
+  if (!agasajadoNombre || !agasajadoNombre.trim()) {
+    return 'El nombre del agasajado es obligatorio';
+  }
+
+  if (edadAgasajado !== undefined && edadAgasajado !== null && Number(edadAgasajado) < 0) {
+    return 'La edad del agasajado no es valida';
+  }
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return 'Debes agregar al menos un producto al pedido';
+  }
+
+  for (const item of items) {
+    const hasProduct = item.productoId && !Number.isNaN(Number(item.productoId));
+    const hasDescription = item.productoNombre && item.productoNombre.trim();
+
+    if (!hasProduct && !hasDescription) {
+      return 'Cada item del pedido debe tener un producto o una descripcion';
+    }
+
+    if (Number.isNaN(Number(item.cantidad)) || Number(item.cantidad) <= 0) {
+      return 'La cantidad de cada item debe ser mayor a 0';
+    }
+
+    if (
+      item.costoUnitario === undefined ||
+      Number.isNaN(Number(item.costoUnitario)) ||
+      Number(item.costoUnitario) < 0
+    ) {
+      return 'El precio de cada item debe ser mayor o igual a 0';
+    }
+  }
+
+  if (Number.isNaN(Number(montoEntregado)) || Number(montoEntregado) < 0) {
+    return 'El monto entregado debe ser mayor o igual a 0';
+  }
+
+  return null;
+}
+
+function validateOrderInput(body) {
+  return body.tipo === 'cliente'
+    ? validateCustomerOrderInput(body)
+    : validateProviderOrderInput(body);
 }
 
 async function listOrders(req, res, next) {
@@ -66,9 +142,22 @@ async function createOrder(req, res, next) {
       return res.status(400).json(buildMessageResponse(validationError));
     }
 
+    const tipo = req.body.tipo === 'cliente' ? 'cliente' : 'proveedor';
     const result = await orderModel.createOrder({
       userId: req.user.id,
+      tipo,
       fechaPedido: req.body.fechaPedido,
+      fechaEvento: req.body.fechaEvento || null,
+      fechaEntrega: req.body.fechaEntrega || null,
+      clienteNombre: req.body.clienteNombre?.trim?.() || '',
+      clienteTelefono: req.body.clienteTelefono?.trim?.() || '',
+      agasajadoNombre: req.body.agasajadoNombre?.trim?.() || '',
+      edadAgasajado:
+        req.body.edadAgasajado === undefined || req.body.edadAgasajado === null || req.body.edadAgasajado === ''
+          ? null
+          : Number(req.body.edadAgasajado),
+      tematica: req.body.tematica?.trim?.() || '',
+      montoEntregado: Number(req.body.montoEntregado || 0),
       notas: req.body.notas?.trim?.() || '',
       items: req.body.items.map((item) => ({
         productoId: item.productoId ? Number(item.productoId) : null,
@@ -89,10 +178,12 @@ async function createOrder(req, res, next) {
     const order = await orderModel.findById(result.orderId);
 
     await registerAudit(req, {
-      action: 'pedido_creado',
+      action: tipo === 'cliente' ? 'pedido_cliente_creado' : 'pedido_creado',
       entity: 'pedido',
       entityId: result.orderId,
       details: {
+        tipo,
+        estado: order?.estado || null,
         items: req.body.items.length,
         cantidadTotal: req.body.items.reduce(
           (accumulator, item) => accumulator + Number(item.cantidad || 0),
@@ -112,8 +203,71 @@ async function createOrder(req, res, next) {
   }
 }
 
+async function updateCustomerOrder(req, res, next) {
+  try {
+    const result = await orderModel.updateCustomerOrder({
+      orderId: Number(req.params.id),
+      userId: req.user.id,
+      estado: req.body.estado?.trim?.() || null,
+      montoEntregado: req.body.montoEntregado,
+      metodoPago: req.body.metodoPago?.trim?.() || null,
+    });
+
+    if (result.error === 'NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Pedido no encontrado'));
+    }
+
+    if (result.error === 'INVALID_TYPE') {
+      return res.status(400).json(buildMessageResponse('Solo los pedidos de clientes se pueden actualizar desde este flujo'));
+    }
+
+    if (result.error === 'BALANCE_PENDING') {
+      return res.status(400).json(buildMessageResponse('Falta completar la entrega antes de marcar como entregado'));
+    }
+
+    if (result.error === 'SELLER_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Usuario vendedor no encontrado'));
+    }
+
+    if (result.error === 'PRODUCT_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Uno de los productos no existe'));
+    }
+
+    if (result.error === 'INSUFFICIENT_STOCK') {
+      return res.status(409).json(
+        buildMessageResponse(
+          `Stock insuficiente para ${result.productName}. Disponible: ${result.availableStock}`,
+        ),
+      );
+    }
+
+    if (result.error === 'INVALID_PAYMENT_SPLIT') {
+      return res.status(400).json(buildMessageResponse('No se pudo registrar la entrega con la forma de pago informada'));
+    }
+
+    const order = await orderModel.findById(result.orderId);
+
+    await registerAudit(req, {
+      action: 'pedido_cliente_actualizado',
+      entity: 'pedido',
+      entityId: result.orderId,
+      details: {
+        estado: order?.estado || null,
+        montoEntregado: order?.montoEntregado || null,
+        saldoPendiente: order?.saldoPendiente || null,
+        ventaId: order?.ventaId || null,
+      },
+    });
+
+    return res.status(200).json(buildOrderResponse(order, 'Pedido actualizado correctamente'));
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   listOrders,
   getOrderById,
   createOrder,
+  updateCustomerOrder,
 };

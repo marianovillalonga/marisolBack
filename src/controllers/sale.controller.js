@@ -11,9 +11,8 @@ const {
 function validateSaleInput({
   clientId,
   descuento,
-  ajusteMetodoPago = 0,
   montoPagado,
-  metodoPago,
+  pagos = [],
   fechaVenta,
   items,
 }) {
@@ -29,16 +28,22 @@ function validateSaleInput({
     return 'El descuento debe ser un numero igual o mayor a 0';
   }
 
-  if (Number.isNaN(Number(ajusteMetodoPago))) {
-    return 'El ajuste por metodo de pago debe ser un numero valido';
-  }
-
   if (Number.isNaN(Number(montoPagado)) || Number(montoPagado) < 0) {
     return 'El monto pagado debe ser un numero igual o mayor a 0';
   }
 
-  if (!metodoPago || !metodoPago.trim()) {
-    return 'El metodo de pago es obligatorio';
+  if (!Array.isArray(pagos)) {
+    return 'Los pagos informados no son validos';
+  }
+
+  for (const pago of pagos) {
+    if (!pago?.metodo || !pago.metodo.trim()) {
+      return 'Cada pago debe tener un metodo valido';
+    }
+
+    if (Number.isNaN(Number(pago.monto)) || Number(pago.monto) <= 0) {
+      return 'Cada pago debe tener un monto mayor a 0';
+    }
   }
 
   if (!fechaVenta || Number.isNaN(Date.parse(fechaVenta))) {
@@ -46,8 +51,11 @@ function validateSaleInput({
   }
 
   for (const item of items) {
-    if (!item.productoId || Number.isNaN(Number(item.productoId))) {
-      return 'Cada item debe tener un producto valido';
+    const hasProduct = item.productoId && !Number.isNaN(Number(item.productoId));
+    const hasManualName = item.productoNombre && item.productoNombre.trim();
+
+    if (!hasProduct && !hasManualName) {
+      return 'Cada item debe tener un producto o un nombre manual';
     }
 
     if (Number.isNaN(Number(item.cantidad)) || Number(item.cantidad) <= 0) {
@@ -63,18 +71,14 @@ function validateSaleInput({
     (accumulator, item) => accumulator + Number(item.cantidad) * Number(item.precioUnitario),
     0,
   );
-  const total = subtotal + Number(ajusteMetodoPago) - Number(descuento);
+  const totalPagos = pagos.reduce((accumulator, pago) => accumulator + Number(pago.monto || 0), 0);
 
-  if (total < 0) {
+  if (Math.abs(totalPagos - Number(montoPagado)) > 0.01) {
+    return 'La suma de los pagos debe coincidir con el monto pagado';
+  }
+
+  if (subtotal - Number(descuento) < 0) {
     return 'El total de la venta no puede ser menor a 0';
-  }
-
-  if (Number(montoPagado) > total) {
-    return 'El monto pagado no puede superar el total';
-  }
-
-  if (total > Number(montoPagado) && !clientId) {
-    return 'Para dejar saldo pendiente debes seleccionar un cliente';
   }
 
   return null;
@@ -128,19 +132,26 @@ async function createSale(req, res, next) {
       return res.status(400).json(buildMessageResponse(validationError));
     }
 
+    const normalizedPayments = Array.isArray(req.body.pagos)
+      ? req.body.pagos
+          .map((pago) => ({
+            metodo: pago?.metodo?.trim?.() || '',
+            monto: Number(pago?.monto || 0),
+          }))
+          .filter((pago) => pago.metodo && pago.monto > 0)
+      : [];
+
     const result = await saleModel.createSale({
       clientId: req.body.clientId ? Number(req.body.clientId) : null,
       sellerId: req.user.id,
       descuento: Number(req.body.descuento),
-      ajusteMetodoPago: Number(req.body.ajusteMetodoPago || 0),
-      ajusteMetodoPagoTipo: req.body.ajusteMetodoPagoTipo?.trim?.() || null,
-      ajusteMetodoPagoPorcentaje: Number(req.body.ajusteMetodoPagoPorcentaje || 0),
       montoPagado: Number(req.body.montoPagado),
-      metodoPago: req.body.metodoPago.trim(),
       notas: req.body.notas?.trim() || '',
       fechaVenta: req.body.fechaVenta,
+      pagos: normalizedPayments,
       items: req.body.items.map((item) => ({
-        productoId: Number(item.productoId),
+        productoId: item.productoId ? Number(item.productoId) : null,
+        productoNombre: item.productoNombre?.trim?.() || '',
         cantidad: Number(item.cantidad),
         precioUnitario: Number(item.precioUnitario),
       })),
@@ -152,6 +163,12 @@ async function createSale(req, res, next) {
 
     if (result.error === 'SELLER_NOT_FOUND') {
       return res.status(404).json(buildMessageResponse('Usuario vendedor no encontrado'));
+    }
+
+    if (result.error === 'CLIENT_REQUIRED_FOR_BALANCE') {
+      return res.status(400).json(
+        buildMessageResponse('Para dejar saldo pendiente debes seleccionar un cliente'),
+      );
     }
 
     if (result.error === 'PRODUCT_NOT_FOUND') {
@@ -166,6 +183,12 @@ async function createSale(req, res, next) {
       );
     }
 
+    if (result.error === 'INVALID_PAYMENT_SPLIT') {
+      return res.status(400).json(
+        buildMessageResponse('Los pagos informados superan el subtotal cubierto de la venta'),
+      );
+    }
+
     const sale = await saleModel.findById(result.saleId);
 
     await registerAudit(req, {
@@ -175,7 +198,8 @@ async function createSale(req, res, next) {
       details: {
         clientId: req.body.clientId ? Number(req.body.clientId) : null,
         total: sale?.total || null,
-        metodoPago: req.body.metodoPago.trim(),
+        metodoPago: sale?.metodoPago || null,
+        pagos: normalizedPayments,
         items: req.body.items.length,
       },
     });

@@ -5,8 +5,35 @@ const {
   roundToTwo,
 } = require('../utils/sale.util');
 
+function normalizePaymentRows(rawPayments) {
+  if (!Array.isArray(rawPayments)) {
+    return [];
+  }
+
+  return rawPayments
+    .map((payment) => ({
+      metodo: payment?.metodo || '',
+      monto: roundToTwo(Number(payment?.monto || 0)),
+    }))
+    .filter((payment) => payment.metodo && payment.monto > 0);
+}
+
+function getPaymentMultiplier(rule) {
+  const percentage = Number(rule?.porcentaje || 0);
+
+  if (!percentage) {
+    return 1;
+  }
+
+  return rule?.tipo === 'aumento'
+    ? 1 + percentage / 100
+    : Math.max(1 - percentage / 100, 0.01);
+}
+
 class SaleModel {
   mapSale(row) {
+    const pagos = normalizePaymentRows(row.pagos);
+
     return {
       id: row.id,
       clienteId: row.cliente_id,
@@ -22,6 +49,7 @@ class SaleModel {
       montoPagado: Number(row.monto_pagado || 0),
       deudaPendiente: Number(row.deuda_pendiente || 0),
       metodoPago: row.metodo_pago,
+      pagos,
       estado: row.estado,
       notas: row.notas,
       fechaVenta: row.fecha_venta,
@@ -56,6 +84,7 @@ class SaleModel {
         monto_pagado NUMERIC(12, 2) NOT NULL DEFAULT 0,
         deuda_pendiente NUMERIC(12, 2) NOT NULL DEFAULT 0,
         metodo_pago VARCHAR(50) NOT NULL DEFAULT 'efectivo',
+        pagos JSONB NOT NULL DEFAULT '[]'::jsonb,
         estado VARCHAR(30) NOT NULL DEFAULT 'confirmada',
         notas TEXT,
         fecha_venta TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -80,7 +109,25 @@ class SaleModel {
       ALTER TABLE IF EXISTS ventas
       ADD COLUMN IF NOT EXISTS ajuste_metodo_pago NUMERIC(12, 2) NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS ajuste_metodo_pago_tipo VARCHAR(20),
-      ADD COLUMN IF NOT EXISTS ajuste_metodo_pago_porcentaje NUMERIC(8, 2) NOT NULL DEFAULT 0
+      ADD COLUMN IF NOT EXISTS ajuste_metodo_pago_porcentaje NUMERIC(8, 2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS pagos JSONB NOT NULL DEFAULT '[]'::jsonb
+    `);
+
+    await pool.query(`
+      UPDATE ventas
+      SET pagos = CASE
+        WHEN jsonb_typeof(pagos) = 'array' AND jsonb_array_length(pagos) > 0 THEN pagos
+        WHEN COALESCE(monto_pagado, 0) > 0 THEN jsonb_build_array(
+          jsonb_build_object(
+            'metodo', COALESCE(metodo_pago, 'efectivo'),
+            'monto', ROUND(COALESCE(monto_pagado, 0)::numeric, 2)
+          )
+        )
+        ELSE '[]'::jsonb
+      END
+      WHERE pagos IS NULL
+         OR jsonb_typeof(pagos) <> 'array'
+         OR (jsonb_typeof(pagos) = 'array' AND jsonb_array_length(pagos) = 0)
     `);
 
     await pool.query(`
@@ -130,6 +177,7 @@ class SaleModel {
         v.monto_pagado,
         v.deuda_pendiente,
         v.metodo_pago,
+        v.pagos,
         v.estado,
         v.notas,
         v.fecha_venta,
@@ -239,13 +287,10 @@ class SaleModel {
     clientId,
     sellerId,
     descuento,
-    ajusteMetodoPago = 0,
-    ajusteMetodoPagoTipo = null,
-    ajusteMetodoPagoPorcentaje = 0,
     montoPagado,
-    metodoPago,
     notas,
     fechaVenta,
+    pagos = [],
     items,
   }) {
     const client = await pool.connect();
@@ -269,7 +314,7 @@ class SaleModel {
       }
 
       const sellerResult = await client.query(
-        'SELECT id, nombre FROM usuarios WHERE id = $1 LIMIT 1',
+        'SELECT id, nombre, configuracion_metodos_pago FROM usuarios WHERE id = $1 LIMIT 1',
         [sellerId],
       );
 
@@ -278,7 +323,10 @@ class SaleModel {
         return { error: 'SELLER_NOT_FOUND' };
       }
 
-      const groupedItems = groupSaleItemsByProduct(items);
+      const catalogItems = items.filter(
+        (item) => item.productoId && !Number.isNaN(Number(item.productoId)),
+      );
+      const groupedItems = groupSaleItemsByProduct(catalogItems);
       const productsById = new Map();
 
       for (const groupedItem of groupedItems) {
@@ -316,20 +364,62 @@ class SaleModel {
       }
 
       const itemSnapshots = items.map((item) => {
-        const productSnapshot = productsById.get(Number(item.productoId));
+        const normalizedProductId = item.productoId ? Number(item.productoId) : null;
+        const productSnapshot = normalizedProductId ? productsById.get(normalizedProductId) : null;
 
         return {
-          productoId: Number(item.productoId),
-          productoNombre: productSnapshot?.productoNombre || '',
+          productoId: normalizedProductId,
+          productoNombre: productSnapshot?.productoNombre || item.productoNombre || '',
           cantidad: Number(item.cantidad),
           precioUnitario: Number(item.precioUnitario),
           subtotal: Number(item.cantidad) * Number(item.precioUnitario),
         };
       });
 
+      const normalizedPayments = normalizePaymentRows(pagos);
       const subtotal = itemSnapshots.reduce((acc, item) => acc + item.subtotal, 0);
-      const total = subtotal + ajusteMetodoPago - descuento;
+      const discountedSubtotal = roundToTwo(Math.max(subtotal - descuento, 0));
+      const paymentBaseComponents = [];
+      let totalPaymentBase = 0;
+      const sellerConfig =
+        sellerResult.rows[0]?.configuracion_metodos_pago &&
+        typeof sellerResult.rows[0].configuracion_metodos_pago === 'object'
+          ? sellerResult.rows[0].configuracion_metodos_pago
+          : {};
+
+      for (const payment of normalizedPayments) {
+        const paymentRule = sellerConfig[payment.metodo];
+        const multiplier = getPaymentMultiplier(paymentRule);
+        const paymentBase = roundToTwo(payment.monto / multiplier);
+
+        paymentBaseComponents.push(paymentBase);
+        totalPaymentBase += paymentBase;
+      }
+
+      totalPaymentBase = roundToTwo(totalPaymentBase);
+
+      if (totalPaymentBase - discountedSubtotal > 0.01) {
+        await client.query('ROLLBACK');
+        return { error: 'INVALID_PAYMENT_SPLIT' };
+      }
+
+      const ajusteMetodoPago = roundToTwo(montoPagado - totalPaymentBase);
+      const singlePaymentRule =
+        normalizedPayments.length === 1 ? sellerConfig[normalizedPayments[0].metodo] : null;
+      const ajusteMetodoPagoTipo =
+        normalizedPayments.length === 1 && Number(singlePaymentRule?.porcentaje || 0) > 0
+          ? singlePaymentRule?.tipo || null
+          : null;
+      const ajusteMetodoPagoPorcentaje =
+        normalizedPayments.length === 1 ? Number(singlePaymentRule?.porcentaje || 0) : 0;
+      const total = roundToTwo(discountedSubtotal + ajusteMetodoPago);
       const deudaPendiente = Math.max(total - montoPagado, 0);
+
+      if (deudaPendiente > 0 && !customer) {
+        await client.query('ROLLBACK');
+        return { error: 'CLIENT_REQUIRED_FOR_BALANCE' };
+      }
+
       const itemAdjustments = distributeAmountAcrossItems(
         ajusteMetodoPago - descuento,
         itemSnapshots.map((item) => item.subtotal),
@@ -338,6 +428,13 @@ class SaleModel {
         roundToTwo(item.subtotal + itemAdjustments[index]),
       );
       const itemPayments = distributeAmountAcrossItems(montoPagado, itemNetTotals);
+
+      const metodoPago =
+        normalizedPayments.length === 0
+          ? 'pendiente'
+          : normalizedPayments.length === 1
+            ? normalizedPayments[0].metodo
+            : 'mixto';
 
       const saleResult = await client.query(
         `
@@ -353,11 +450,12 @@ class SaleModel {
             monto_pagado,
             deuda_pendiente,
             metodo_pago,
+            pagos,
             estado,
             notas,
             fecha_venta
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'confirmada', $12, $13)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'confirmada', $13, $14)
           RETURNING id
         `,
         [
@@ -372,6 +470,7 @@ class SaleModel {
           montoPagado,
           deudaPendiente,
           metodoPago,
+          JSON.stringify(normalizedPayments),
           notas || null,
           fechaVenta,
         ],
@@ -379,11 +478,7 @@ class SaleModel {
 
       const saleId = saleResult.rows[0].id;
 
-      for (const item of items) {
-        const productSnapshot = itemSnapshots.find(
-          (snapshot) => snapshot.productoId === Number(item.productoId),
-        );
-
+      for (const item of itemSnapshots) {
         await client.query(
           `
             INSERT INTO venta_detalles (
@@ -398,11 +493,11 @@ class SaleModel {
           `,
           [
             saleId,
-            Number(item.productoId),
-            productSnapshot?.productoNombre || '',
-            Number(item.cantidad),
-            Number(item.precioUnitario),
-            Number(item.cantidad) * Number(item.precioUnitario),
+            item.productoId,
+            item.productoNombre || '',
+            item.cantidad,
+            item.precioUnitario,
+            item.subtotal,
           ],
         );
       }

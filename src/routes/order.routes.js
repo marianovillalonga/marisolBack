@@ -9,5 +9,6 @@ const router = Router();
 router.get('/', authMiddleware, roleMiddleware(['admin', 'vendedor']), orderController.listOrders);
 router.get('/:id', authMiddleware, roleMiddleware(['admin', 'vendedor']), orderController.getOrderById);
 router.post('/', authMiddleware, roleMiddleware(['admin', 'vendedor']), orderController.createOrder);
+router.patch('/:id/customer', authMiddleware, roleMiddleware(['admin', 'vendedor']), orderController.updateCustomerOrder);
 
 module.exports = router;

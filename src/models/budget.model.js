@@ -249,21 +249,32 @@ class BudgetModel {
       const itemSnapshots = [];
 
       for (const item of items) {
-        const productResult = await client.query(
-          'SELECT id, nombre FROM productos WHERE id = $1 LIMIT 1',
-          [item.productoId],
-        );
+        if (item.productoId) {
+          const productResult = await client.query(
+            'SELECT id, nombre FROM productos WHERE id = $1 LIMIT 1',
+            [item.productoId],
+          );
 
-        const product = productResult.rows[0];
+          const product = productResult.rows[0];
 
-        if (!product) {
-          await client.query('ROLLBACK');
-          return { error: 'PRODUCT_NOT_FOUND' };
+          if (!product) {
+            await client.query('ROLLBACK');
+            return { error: 'PRODUCT_NOT_FOUND' };
+          }
+
+          itemSnapshots.push({
+            productoId: product.id,
+            productoNombre: product.nombre,
+            cantidad: item.cantidad,
+            precioUnitario: item.precioUnitario,
+            subtotal: Number(item.cantidad) * Number(item.precioUnitario),
+          });
+          continue;
         }
 
         itemSnapshots.push({
-          productoId: product.id,
-          productoNombre: product.nombre,
+          productoId: null,
+          productoNombre: item.productoNombre,
           cantidad: item.cantidad,
           precioUnitario: item.precioUnitario,
           subtotal: Number(item.cantidad) * Number(item.precioUnitario),

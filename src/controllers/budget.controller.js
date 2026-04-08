@@ -41,8 +41,11 @@ function validateBudgetInput({
   }
 
   for (const item of items) {
-    if (!item.productoId || Number.isNaN(Number(item.productoId))) {
-      return 'Cada item debe tener un producto valido';
+    const hasProduct = item.productoId && !Number.isNaN(Number(item.productoId));
+    const hasManualName = item.productoNombre && item.productoNombre.trim();
+
+    if (!hasProduct && !hasManualName) {
+      return 'Cada item debe tener un producto o un nombre manual';
     }
 
     if (Number.isNaN(Number(item.cantidad)) || Number(item.cantidad) <= 0) {
@@ -110,7 +113,8 @@ async function createBudget(req, res, next) {
       fechaEmision: req.body.fechaEmision,
       diasValidez: Number(req.body.diasValidez),
       items: req.body.items.map((item) => ({
-        productoId: Number(item.productoId),
+        productoId: item.productoId ? Number(item.productoId) : null,
+        productoNombre: item.productoNombre?.trim?.() || '',
         cantidad: Number(item.cantidad),
         precioUnitario: Number(item.precioUnitario),
       })),

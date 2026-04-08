@@ -1,16 +1,37 @@
 const pool = require('../config/db');
+const saleModel = require('./sale.model');
+
+function roundToTwo(value) {
+  return Number(Number(value || 0).toFixed(2));
+}
 
 class OrderModel {
   mapOrder(row) {
+    const montoTotal = Number(row.monto_total || 0);
+    const montoEntregado = Number(row.monto_entregado || 0);
+
     return {
       id: row.id,
+      tipo: row.tipo || 'proveedor',
+      estado: row.estado || 'registrado',
       usuarioId: row.usuario_id,
       usuarioNombre: row.usuario_nombre,
       fechaPedido: row.fecha_pedido,
+      fechaEvento: row.fecha_evento,
+      fechaEntrega: row.fecha_entrega,
+      clienteNombre: row.cliente_nombre,
+      clienteTelefono: row.cliente_telefono,
+      agasajadoNombre: row.agasajado_nombre,
+      edadAgasajado: row.edad_agasajado !== null ? Number(row.edad_agasajado) : null,
+      tematica: row.tematica,
+      metodoPago: row.metodo_pago,
+      ventaId: row.venta_id,
       notas: row.notas,
       cantidadItems: Number(row.cantidad_items || 0),
       cantidadLineas: Number(row.cantidad_lineas || 0),
-      montoTotal: Number(row.monto_total || 0),
+      montoTotal,
+      montoEntregado,
+      saldoPendiente: Number(row.saldo_pendiente ?? Math.max(montoTotal - montoEntregado, 0)),
     };
   }
 
@@ -36,7 +57,20 @@ class OrderModel {
       CREATE TABLE IF NOT EXISTS pedidos (
         id SERIAL PRIMARY KEY,
         usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+        tipo VARCHAR(20) NOT NULL DEFAULT 'proveedor',
+        estado VARCHAR(20) NOT NULL DEFAULT 'registrado',
         fecha_pedido TIMESTAMP NOT NULL DEFAULT NOW(),
+        fecha_evento TIMESTAMP,
+        fecha_entrega TIMESTAMP,
+        cliente_nombre VARCHAR(150),
+        cliente_telefono VARCHAR(50),
+        agasajado_nombre VARCHAR(150),
+        edad_agasajado INTEGER,
+        tematica VARCHAR(150),
+        monto_entregado NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        saldo_pendiente NUMERIC(12, 2) NOT NULL DEFAULT 0,
+        metodo_pago VARCHAR(50),
+        venta_id INTEGER REFERENCES ventas(id) ON DELETE SET NULL,
         notas TEXT,
         fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW(),
         fecha_actualizacion TIMESTAMP NOT NULL DEFAULT NOW()
@@ -57,8 +91,46 @@ class OrderModel {
     `);
 
     await pool.query(`
+      ALTER TABLE pedidos
+      ADD COLUMN IF NOT EXISTS tipo VARCHAR(20) NOT NULL DEFAULT 'proveedor',
+      ADD COLUMN IF NOT EXISTS estado VARCHAR(20) NOT NULL DEFAULT 'registrado',
+      ADD COLUMN IF NOT EXISTS fecha_evento TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS fecha_entrega TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS cliente_nombre VARCHAR(150),
+      ADD COLUMN IF NOT EXISTS cliente_telefono VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS agasajado_nombre VARCHAR(150),
+      ADD COLUMN IF NOT EXISTS edad_agasajado INTEGER,
+      ADD COLUMN IF NOT EXISTS tematica VARCHAR(150),
+      ADD COLUMN IF NOT EXISTS monto_entregado NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS saldo_pendiente NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(50),
+      ADD COLUMN IF NOT EXISTS venta_id INTEGER REFERENCES ventas(id) ON DELETE SET NULL
+    `);
+
+    await pool.query(`
       ALTER TABLE pedido_detalles
       ADD COLUMN IF NOT EXISTS costo_unitario NUMERIC(12,2) NOT NULL DEFAULT 0
+    `);
+
+    await pool.query(`
+      UPDATE pedidos
+      SET
+        tipo = COALESCE(tipo, 'proveedor'),
+        estado = CASE
+          WHEN COALESCE(tipo, 'proveedor') = 'cliente' THEN COALESCE(NULLIF(estado, ''), 'pendiente')
+          ELSE COALESCE(NULLIF(estado, ''), 'registrado')
+        END,
+        saldo_pendiente = GREATEST(
+          COALESCE((
+            SELECT SUM(pd.cantidad * pd.costo_unitario)
+            FROM pedido_detalles pd
+            WHERE pd.pedido_id = pedidos.id
+          ), 0) - COALESCE(monto_entregado, 0),
+          0
+        )
+      WHERE tipo IS NULL
+         OR estado IS NULL
+         OR saldo_pendiente IS NULL
     `);
 
     await pool.query(`
@@ -97,7 +169,20 @@ class OrderModel {
         p.id,
         p.usuario_id,
         u.nombre AS usuario_nombre,
+        p.tipo,
+        p.estado,
         p.fecha_pedido,
+        p.fecha_evento,
+        p.fecha_entrega,
+        p.cliente_nombre,
+        p.cliente_telefono,
+        p.agasajado_nombre,
+        p.edad_agasajado,
+        p.tematica,
+        p.monto_entregado,
+        p.saldo_pendiente,
+        p.metodo_pago,
+        p.venta_id,
         p.notas,
         COALESCE(SUM(pd.cantidad), 0)::int AS cantidad_items,
         COUNT(pd.id)::int AS cantidad_lineas,
@@ -121,9 +206,12 @@ class OrderModel {
             OR LOWER(COALESCE(u.nombre, '')) LIKE $1
             OR LOWER(COALESCE(p.notas, '')) LIKE $1
             OR LOWER(COALESCE(pd.producto_nombre, '')) LIKE $1
+            OR LOWER(COALESCE(p.cliente_nombre, '')) LIKE $1
+            OR LOWER(COALESCE(p.agasajado_nombre, '')) LIKE $1
+            OR LOWER(COALESCE(p.tematica, '')) LIKE $1
           )
         GROUP BY p.id, u.nombre
-        ORDER BY p.fecha_pedido DESC, p.id DESC
+        ORDER BY COALESCE(p.fecha_entrega, p.fecha_evento, p.fecha_pedido) DESC, p.id DESC
       `,
       [normalizedSearch],
     );
@@ -171,7 +259,13 @@ class OrderModel {
     };
   }
 
-  async createOrder({ userId, fechaPedido, notas, items }) {
+  async createOrder(payload) {
+    return payload.tipo === 'cliente'
+      ? this.createCustomerOrder(payload)
+      : this.createSupplierOrder(payload);
+  }
+
+  async createSupplierOrder({ userId, fechaPedido, notas, items }) {
     const client = await pool.connect();
 
     try {
@@ -191,10 +285,12 @@ class OrderModel {
         `
           INSERT INTO pedidos (
             usuario_id,
+            tipo,
+            estado,
             fecha_pedido,
             notas
           )
-          VALUES ($1, $2, $3)
+          VALUES ($1, 'proveedor', 'registrado', $2, $3)
           RETURNING id
         `,
         [userId, fechaPedido, notas || null],
@@ -266,6 +362,270 @@ class OrderModel {
       throw error;
     } finally {
       client.release();
+    }
+  }
+
+  async createCustomerOrder({
+    userId,
+    fechaPedido,
+    fechaEvento,
+    fechaEntrega,
+    clienteNombre,
+    clienteTelefono,
+    agasajadoNombre,
+    edadAgasajado,
+    tematica,
+    montoEntregado = 0,
+    notas,
+    items,
+  }) {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const userResult = await client.query(
+        'SELECT id FROM usuarios WHERE id = $1 LIMIT 1',
+        [userId],
+      );
+
+      if (!userResult.rows[0]) {
+        await client.query('ROLLBACK');
+        return { error: 'USER_NOT_FOUND' };
+      }
+
+      const itemSnapshots = [];
+
+      for (const item of items) {
+        if (item.productoId) {
+          const productResult = await client.query(
+            `
+              SELECT id, nombre, precio
+              FROM productos
+              WHERE id = $1
+              LIMIT 1
+            `,
+            [item.productoId],
+          );
+
+          const product = productResult.rows[0];
+
+          if (!product) {
+            await client.query('ROLLBACK');
+            return { error: 'PRODUCT_NOT_FOUND' };
+          }
+
+          itemSnapshots.push({
+            productoId: product.id,
+            productoNombre: product.nombre,
+            cantidad: Number(item.cantidad),
+            costoUnitario: Number(item.costoUnitario),
+          });
+          continue;
+        }
+
+        itemSnapshots.push({
+          productoId: null,
+          productoNombre: item.productoNombre,
+          cantidad: Number(item.cantidad),
+          costoUnitario: Number(item.costoUnitario),
+        });
+      }
+
+      const montoTotal = roundToTwo(
+        itemSnapshots.reduce(
+          (accumulator, item) => accumulator + item.cantidad * item.costoUnitario,
+          0,
+        ),
+      );
+      const safeMontoEntregado = roundToTwo(montoEntregado);
+      const saldoPendiente = roundToTwo(Math.max(montoTotal - safeMontoEntregado, 0));
+
+      const { rows: orderRows } = await client.query(
+        `
+          INSERT INTO pedidos (
+            usuario_id,
+            tipo,
+            estado,
+            fecha_pedido,
+            fecha_evento,
+            fecha_entrega,
+            cliente_nombre,
+            cliente_telefono,
+            agasajado_nombre,
+            edad_agasajado,
+            tematica,
+            monto_entregado,
+            saldo_pendiente,
+            notas
+          )
+          VALUES ($1, 'cliente', 'pendiente', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          RETURNING id
+        `,
+        [
+          userId,
+          fechaPedido,
+          fechaEvento,
+          fechaEntrega,
+          clienteNombre || null,
+          clienteTelefono || null,
+          agasajadoNombre || null,
+          edadAgasajado,
+          tematica || null,
+          safeMontoEntregado,
+          saldoPendiente,
+          notas || null,
+        ],
+      );
+
+      const orderId = orderRows[0].id;
+
+      for (const item of itemSnapshots) {
+        await client.query(
+          `
+            INSERT INTO pedido_detalles (
+              pedido_id,
+              producto_id,
+              producto_nombre,
+              cantidad,
+              costo_unitario,
+              stock_anterior,
+              stock_actual
+            )
+            VALUES ($1, $2, $3, $4, $5, 0, 0)
+          `,
+          [orderId, item.productoId, item.productoNombre, item.cantidad, item.costoUnitario],
+        );
+      }
+
+      await client.query('COMMIT');
+      return { orderId };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateCustomerOrder({
+    orderId,
+    userId,
+    estado,
+    montoEntregado,
+    metodoPago,
+  }) {
+    const dbClient = await pool.connect();
+
+    try {
+      await dbClient.query('BEGIN');
+
+      const orderResult = await dbClient.query(
+        `
+          SELECT
+            p.*,
+            COALESCE(SUM(pd.cantidad * pd.costo_unitario), 0)::numeric(12,2) AS monto_total
+          FROM pedidos p
+          LEFT JOIN pedido_detalles pd ON pd.pedido_id = p.id
+          WHERE p.id = $1
+          GROUP BY p.id
+          LIMIT 1
+          FOR UPDATE
+        `,
+        [orderId],
+      );
+
+      const order = orderResult.rows[0];
+
+      if (!order) {
+        await dbClient.query('ROLLBACK');
+        return { error: 'NOT_FOUND' };
+      }
+
+      if (order.tipo !== 'cliente') {
+        await dbClient.query('ROLLBACK');
+        return { error: 'INVALID_TYPE' };
+      }
+
+      const safeMontoEntregado = roundToTwo(
+        montoEntregado !== undefined ? montoEntregado : order.monto_entregado,
+      );
+      const montoTotal = roundToTwo(order.monto_total);
+      const saldoPendiente = roundToTwo(Math.max(montoTotal - safeMontoEntregado, 0));
+      const nextEstado = estado || order.estado;
+
+      if (nextEstado === 'entregado' && saldoPendiente > 0) {
+        await dbClient.query('ROLLBACK');
+        return { error: 'BALANCE_PENDING', saldoPendiente };
+      }
+
+      let ventaId = order.venta_id;
+
+      if (nextEstado === 'entregado' && !ventaId) {
+        const detailsResult = await dbClient.query(
+          `
+            SELECT producto_id, producto_nombre, cantidad, costo_unitario
+            FROM pedido_detalles
+            WHERE pedido_id = $1
+            ORDER BY id ASC
+          `,
+          [orderId],
+        );
+
+        const items = detailsResult.rows.map((item) => ({
+          productoId: item.producto_id ? Number(item.producto_id) : null,
+          productoNombre: item.producto_nombre,
+          cantidad: Number(item.cantidad),
+          precioUnitario: Number(item.costo_unitario),
+        }));
+
+        const saleResult = await saleModel.createSale({
+          clientId: null,
+          sellerId: userId,
+          descuento: 0,
+          montoPagado: montoTotal,
+          pagos: [{ metodo: metodoPago, monto: montoTotal }],
+          notas: `Entrega de pedido de cliente #${orderId} - ${order.agasajado_nombre || order.cliente_nombre || ''}`.trim(),
+          fechaVenta: (order.fecha_entrega || new Date().toISOString()).slice(0, 10),
+          items,
+        });
+
+        if (saleResult.error) {
+          await dbClient.query('ROLLBACK');
+          return saleResult;
+        }
+
+        ventaId = saleResult.saleId;
+      }
+
+      await dbClient.query(
+        `
+          UPDATE pedidos
+          SET
+            estado = $2,
+            monto_entregado = $3,
+            saldo_pendiente = $4,
+            metodo_pago = $5,
+            venta_id = $6
+          WHERE id = $1
+        `,
+        [
+          orderId,
+          nextEstado,
+          safeMontoEntregado,
+          saldoPendiente,
+          metodoPago || order.metodo_pago || null,
+          ventaId || null,
+        ],
+      );
+
+      await dbClient.query('COMMIT');
+      return { orderId, saleId: ventaId || null };
+    } catch (error) {
+      await dbClient.query('ROLLBACK');
+      throw error;
+    } finally {
+      dbClient.release();
     }
   }
 }
