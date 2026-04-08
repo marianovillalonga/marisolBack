@@ -1,5 +1,6 @@
 const saleModel = require('../models/sale.model');
 const { registerAudit } = require('../utils/audit.util');
+const { validateSaleInput } = require('../utils/document-validation.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const {
   buildSaleMessageResponse,
@@ -7,82 +8,6 @@ const {
   buildSalesResponse,
   buildSalesSummaryResponse,
 } = require('../views/sale.view');
-
-function validateSaleInput({
-  clientId,
-  descuento,
-  montoPagado,
-  pagos = [],
-  fechaVenta,
-  items,
-}) {
-  if (clientId !== null && clientId !== undefined && Number.isNaN(Number(clientId))) {
-    return 'El cliente seleccionado no es valido';
-  }
-
-  if (!Array.isArray(items) || items.length === 0) {
-    return 'Debes agregar al menos un producto a la venta';
-  }
-
-  if (Number.isNaN(Number(descuento)) || Number(descuento) < 0) {
-    return 'El descuento debe ser un numero igual o mayor a 0';
-  }
-
-  if (Number.isNaN(Number(montoPagado)) || Number(montoPagado) < 0) {
-    return 'El monto pagado debe ser un numero igual o mayor a 0';
-  }
-
-  if (!Array.isArray(pagos)) {
-    return 'Los pagos informados no son validos';
-  }
-
-  for (const pago of pagos) {
-    if (!pago?.metodo || !pago.metodo.trim()) {
-      return 'Cada pago debe tener un metodo valido';
-    }
-
-    if (Number.isNaN(Number(pago.monto)) || Number(pago.monto) <= 0) {
-      return 'Cada pago debe tener un monto mayor a 0';
-    }
-  }
-
-  if (!fechaVenta || Number.isNaN(Date.parse(fechaVenta))) {
-    return 'La fecha de venta es obligatoria';
-  }
-
-  for (const item of items) {
-    const hasProduct = item.productoId && !Number.isNaN(Number(item.productoId));
-    const hasManualName = item.productoNombre && item.productoNombre.trim();
-
-    if (!hasProduct && !hasManualName) {
-      return 'Cada item debe tener un producto o un nombre manual';
-    }
-
-    if (Number.isNaN(Number(item.cantidad)) || Number(item.cantidad) <= 0) {
-      return 'La cantidad de cada item debe ser mayor a 0';
-    }
-
-    if (Number.isNaN(Number(item.precioUnitario)) || Number(item.precioUnitario) < 0) {
-      return 'El precio unitario de cada item debe ser igual o mayor a 0';
-    }
-  }
-
-  const subtotal = items.reduce(
-    (accumulator, item) => accumulator + Number(item.cantidad) * Number(item.precioUnitario),
-    0,
-  );
-  const totalPagos = pagos.reduce((accumulator, pago) => accumulator + Number(pago.monto || 0), 0);
-
-  if (Math.abs(totalPagos - Number(montoPagado)) > 0.01) {
-    return 'La suma de los pagos debe coincidir con el monto pagado';
-  }
-
-  if (subtotal - Number(descuento) < 0) {
-    return 'El total de la venta no puede ser menor a 0';
-  }
-
-  return null;
-}
 
 async function listSales(req, res, next) {
   try {

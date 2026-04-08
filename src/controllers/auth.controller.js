@@ -1,6 +1,7 @@
 const userModel = require('../models/user.model');
 const sessionModel = require('../models/session.model');
 const { registerAudit } = require('../utils/audit.util');
+const { clearAuthCookie, setAuthCookie } = require('../utils/cookie.util');
 const { createAuthToken } = require('../utils/token.util');
 const {
   buildCurrentUserResponse,
@@ -33,6 +34,7 @@ async function login(req, res, next) {
       email: user.email,
       role: user.role,
     });
+    setAuthCookie(res, token);
 
     await registerAudit(req, {
       action: 'login',
@@ -67,6 +69,7 @@ async function me(req, res, next) {
 async function logout(req, res, next) {
   try {
     if (!req.tokenPayload?.jti || !req.tokenPayload?.exp) {
+      clearAuthCookie(res);
       return res.status(400).json(buildMessageResponse('Token invalido o vencido'));
     }
 
@@ -85,6 +88,7 @@ async function logout(req, res, next) {
       },
     });
 
+    clearAuthCookie(res);
     return res.status(200).json(buildLogoutResponse());
   } catch (error) {
     next(error);

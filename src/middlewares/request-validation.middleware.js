@@ -2,7 +2,15 @@ const { buildMessageResponse } = require('../views/auth.view');
 const { hasJsonContentType, isPositiveInteger } = require('../utils/validation.util');
 
 function requireJsonContentType(req, res, next) {
-  if (['POST', 'PUT', 'PATCH'].includes(req.method) && !hasJsonContentType(req)) {
+  const hasRequestBody =
+    Boolean(req.headers['transfer-encoding']) ||
+    (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0');
+
+  if (
+    ['POST', 'PUT', 'PATCH'].includes(req.method) &&
+    hasRequestBody &&
+    !hasJsonContentType(req)
+  ) {
     return res
       .status(415)
       .json(buildMessageResponse('El tipo de contenido debe ser application/json'));

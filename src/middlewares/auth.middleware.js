@@ -1,16 +1,20 @@
 const { verifyAuthToken } = require('../utils/token.util');
+const { getAuthTokenFromCookies } = require('../utils/cookie.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const sessionModel = require('../models/session.model');
 const userModel = require('../models/user.model');
 
 async function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
+  const cookieToken = getAuthTokenFromCookies(req.headers.cookie);
+  const token =
+    authHeader && authHeader.startsWith('Bearer ')
+      ? authHeader.split(' ')[1]
+      : cookieToken;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!token) {
     return res.status(401).json(buildMessageResponse('Token no enviado'));
   }
-
-  const token = authHeader.split(' ')[1];
 
   try {
     const payload = verifyAuthToken(token);

@@ -8,6 +8,7 @@ const FRONTEND_URLS = (process.env.FRONTEND_URLS || FRONTEND_URL)
   .filter(Boolean);
 const AUTH_SECRET = process.env.AUTH_SECRET || 'desarrollo-local';
 const AUTH_TOKEN_TTL = process.env.AUTH_TOKEN_TTL || '8h';
+const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'marisol_auth';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@marisol.com';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const ADMIN_NAME = process.env.ADMIN_NAME || 'Administrador';
@@ -61,6 +62,7 @@ module.exports = {
   FRONTEND_URLS,
   AUTH_SECRET,
   AUTH_TOKEN_TTL,
+  AUTH_COOKIE_NAME,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   ADMIN_NAME,

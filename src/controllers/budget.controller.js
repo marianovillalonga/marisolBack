@@ -1,74 +1,8 @@
 const budgetModel = require('../models/budget.model');
 const { registerAudit } = require('../utils/audit.util');
+const { validateBudgetInput } = require('../utils/document-validation.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const { buildBudgetResponse, buildBudgetsResponse } = require('../views/budget.view');
-
-function validateBudgetInput({
-  clientId,
-  descuento,
-  ajusteMetodoPago = 0,
-  metodoPago,
-  fechaEmision,
-  diasValidez,
-  items,
-}) {
-  if (clientId !== null && clientId !== undefined && Number.isNaN(Number(clientId))) {
-    return 'El cliente seleccionado no es valido';
-  }
-
-  if (!Array.isArray(items) || items.length === 0) {
-    return 'Debes agregar al menos un producto al presupuesto';
-  }
-
-  if (Number.isNaN(Number(descuento)) || Number(descuento) < 0) {
-    return 'El descuento debe ser un numero igual o mayor a 0';
-  }
-
-  if (Number.isNaN(Number(ajusteMetodoPago))) {
-    return 'El ajuste por metodo de pago debe ser un numero valido';
-  }
-
-  if (!metodoPago || !metodoPago.trim()) {
-    return 'El metodo de pago es obligatorio';
-  }
-
-  if (!fechaEmision || Number.isNaN(Date.parse(fechaEmision))) {
-    return 'La fecha de emision es obligatoria';
-  }
-
-  if (Number.isNaN(Number(diasValidez)) || Number(diasValidez) <= 0) {
-    return 'Los dias de validez deben ser mayores a 0';
-  }
-
-  for (const item of items) {
-    const hasProduct = item.productoId && !Number.isNaN(Number(item.productoId));
-    const hasManualName = item.productoNombre && item.productoNombre.trim();
-
-    if (!hasProduct && !hasManualName) {
-      return 'Cada item debe tener un producto o un nombre manual';
-    }
-
-    if (Number.isNaN(Number(item.cantidad)) || Number(item.cantidad) <= 0) {
-      return 'La cantidad de cada item debe ser mayor a 0';
-    }
-
-    if (Number.isNaN(Number(item.precioUnitario)) || Number(item.precioUnitario) < 0) {
-      return 'El precio unitario de cada item debe ser igual o mayor a 0';
-    }
-  }
-
-  const subtotal = items.reduce(
-    (accumulator, item) => accumulator + Number(item.cantidad) * Number(item.precioUnitario),
-    0,
-  );
-  const total = subtotal + Number(ajusteMetodoPago) - Number(descuento);
-
-  if (total < 0) {
-    return 'El total del presupuesto no puede ser menor a 0';
-  }
-
-  return null;
-}
 
 async function listBudgets(req, res, next) {
   try {

@@ -1,115 +1,11 @@
 const orderModel = require('../models/order.model');
 const { registerAudit } = require('../utils/audit.util');
+const { validateOrderInput } = require('../utils/document-validation.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const {
   buildOrderResponse,
   buildOrdersResponse,
 } = require('../views/order.view');
-
-function validateProviderOrderInput({ fechaPedido, items }) {
-  if (!fechaPedido || Number.isNaN(Date.parse(fechaPedido))) {
-    return 'La fecha del pedido es obligatoria';
-  }
-
-  if (!Array.isArray(items) || items.length === 0) {
-    return 'Debes agregar al menos un producto al pedido';
-  }
-
-  for (const item of items) {
-    const hasProduct = item.productoId && !Number.isNaN(Number(item.productoId));
-    const hasDescription = item.productoNombre && item.productoNombre.trim();
-
-    if (!hasProduct && !hasDescription) {
-      return 'Cada item debe tener un producto o una descripcion';
-    }
-
-    if (Number.isNaN(Number(item.cantidad)) || Number(item.cantidad) <= 0) {
-      return 'La cantidad de cada item debe ser mayor a 0';
-    }
-
-    if (
-      item.costoUnitario === undefined ||
-      Number.isNaN(Number(item.costoUnitario)) ||
-      Number(item.costoUnitario) < 0
-    ) {
-      return 'El costo de cada item debe ser mayor o igual a 0';
-    }
-  }
-
-  return null;
-}
-
-function validateCustomerOrderInput({
-  fechaPedido,
-  fechaEvento,
-  fechaEntrega,
-  clienteNombre,
-  agasajadoNombre,
-  edadAgasajado,
-  montoEntregado = 0,
-  items,
-}) {
-  if (!fechaPedido || Number.isNaN(Date.parse(fechaPedido))) {
-    return 'La fecha del pedido es obligatoria';
-  }
-
-  if (!fechaEvento || Number.isNaN(Date.parse(fechaEvento))) {
-    return 'La fecha del evento es obligatoria';
-  }
-
-  if (!fechaEntrega || Number.isNaN(Date.parse(fechaEntrega))) {
-    return 'La fecha de entrega es obligatoria';
-  }
-
-  if (!clienteNombre || !clienteNombre.trim()) {
-    return 'El nombre del cliente es obligatorio';
-  }
-
-  if (!agasajadoNombre || !agasajadoNombre.trim()) {
-    return 'El nombre del agasajado es obligatorio';
-  }
-
-  if (edadAgasajado !== undefined && edadAgasajado !== null && Number(edadAgasajado) < 0) {
-    return 'La edad del agasajado no es valida';
-  }
-
-  if (!Array.isArray(items) || items.length === 0) {
-    return 'Debes agregar al menos un producto al pedido';
-  }
-
-  for (const item of items) {
-    const hasProduct = item.productoId && !Number.isNaN(Number(item.productoId));
-    const hasDescription = item.productoNombre && item.productoNombre.trim();
-
-    if (!hasProduct && !hasDescription) {
-      return 'Cada item del pedido debe tener un producto o una descripcion';
-    }
-
-    if (Number.isNaN(Number(item.cantidad)) || Number(item.cantidad) <= 0) {
-      return 'La cantidad de cada item debe ser mayor a 0';
-    }
-
-    if (
-      item.costoUnitario === undefined ||
-      Number.isNaN(Number(item.costoUnitario)) ||
-      Number(item.costoUnitario) < 0
-    ) {
-      return 'El precio de cada item debe ser mayor o igual a 0';
-    }
-  }
-
-  if (Number.isNaN(Number(montoEntregado)) || Number(montoEntregado) < 0) {
-    return 'El monto entregado debe ser mayor o igual a 0';
-  }
-
-  return null;
-}
-
-function validateOrderInput(body) {
-  return body.tipo === 'cliente'
-    ? validateCustomerOrderInput(body)
-    : validateProviderOrderInput(body);
-}
 
 async function listOrders(req, res, next) {
   try {

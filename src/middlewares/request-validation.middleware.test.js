@@ -24,6 +24,9 @@ function createMockResponse() {
 test('requireJsonContentType rechaza POST sin content-type json', () => {
   const req = {
     method: 'POST',
+    headers: {
+      'content-length': '10',
+    },
     is(pattern) {
       return pattern === 'application/json' ? false : null;
     },
