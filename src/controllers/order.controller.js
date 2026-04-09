@@ -1,6 +1,6 @@
 const orderModel = require('../models/order.model');
 const { registerAudit } = require('../utils/audit.util');
-const { validateOrderInput } = require('../utils/document-validation.util');
+const { validateCustomerOrderUpdateInput, validateOrderInput } = require('../utils/document-validation.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const {
   buildOrderResponse,
@@ -211,6 +211,16 @@ async function confirmDraftOrder(req, res, next) {
 
 async function updateCustomerOrder(req, res, next) {
   try {
+    const validationError = validateCustomerOrderUpdateInput({
+      estado: req.body.estado,
+      montoEntregado: req.body.montoEntregado,
+      metodoPago: req.body.metodoPago,
+    });
+
+    if (validationError) {
+      return res.status(400).json(buildMessageResponse(validationError));
+    }
+
     const result = await orderModel.updateCustomerOrder({
       orderId: Number(req.params.id),
       userId: req.user.id,
@@ -229,6 +239,10 @@ async function updateCustomerOrder(req, res, next) {
 
     if (result.error === 'BALANCE_PENDING') {
       return res.status(400).json(buildMessageResponse('Falta completar la entrega antes de marcar como entregado'));
+    }
+
+    if (result.error === 'EXCESS_DELIVERY_AMOUNT') {
+      return res.status(400).json(buildMessageResponse('El monto entregado no puede superar el total del pedido'));
     }
 
     if (result.error === 'SELLER_NOT_FOUND') {

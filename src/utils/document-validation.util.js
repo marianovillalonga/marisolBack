@@ -14,6 +14,15 @@ function isPositiveNumber(value) {
   return Number.isFinite(numericValue) && numericValue > 0;
 }
 
+function isNonNegativeInteger(value) {
+  const numericValue = Number(value);
+  return Number.isInteger(numericValue) && numericValue >= 0;
+}
+
+function toTimestamp(value) {
+  return new Date(value).getTime();
+}
+
 function validateDocumentItems(items, { emptyMessage, missingProductMessage, quantityMessage, priceMessage }) {
   if (!Array.isArray(items) || items.length === 0) {
     return emptyMessage;
@@ -211,6 +220,18 @@ function validateCustomerOrderInput({
     return 'La fecha de entrega es obligatoria';
   }
 
+  if (toTimestamp(fechaPedido) > toTimestamp(fechaEvento)) {
+    return 'La fecha del pedido no puede ser posterior a la fecha del evento';
+  }
+
+  if (toTimestamp(fechaPedido) > toTimestamp(fechaEntrega)) {
+    return 'La fecha del pedido no puede ser posterior a la fecha de entrega';
+  }
+
+  if (toTimestamp(fechaEntrega) > toTimestamp(fechaEvento)) {
+    return 'La fecha de entrega no puede ser posterior a la fecha del evento';
+  }
+
   if (!isNonEmptyString(clienteNombre)) {
     return 'El nombre del cliente es obligatorio';
   }
@@ -223,9 +244,9 @@ function validateCustomerOrderInput({
     edadAgasajado !== undefined &&
     edadAgasajado !== null &&
     edadAgasajado !== '' &&
-    !isNonNegativeNumber(edadAgasajado)
+    !isNonNegativeInteger(edadAgasajado)
   ) {
-    return 'La edad del agasajado no es valida';
+    return 'La edad del agasajado debe ser un numero entero mayor o igual a 0';
   }
 
   const itemsError = validateDocumentItems(items, {
@@ -243,6 +264,41 @@ function validateCustomerOrderInput({
     return 'El monto entregado debe ser mayor o igual a 0';
   }
 
+  const totalPedido = items.reduce(
+    (accumulator, item) => accumulator + Number(item.cantidad) * Number(item.costoUnitario),
+    0,
+  );
+
+  if (Number(montoEntregado) - totalPedido > 0.01) {
+    return 'El monto entregado no puede superar el total del pedido';
+  }
+
+  return null;
+}
+
+function validateCustomerOrderUpdateInput({ estado, montoEntregado, metodoPago }) {
+  const normalizedEstado = estado === undefined || estado === null ? '' : String(estado).trim().toLowerCase();
+
+  if (
+    normalizedEstado &&
+    !['pendiente', 'hecho', 'entregado'].includes(normalizedEstado)
+  ) {
+    return 'El estado informado no es valido';
+  }
+
+  if (
+    montoEntregado !== undefined &&
+    montoEntregado !== null &&
+    montoEntregado !== '' &&
+    !isNonNegativeNumber(montoEntregado)
+  ) {
+    return 'El monto entregado debe ser mayor o igual a 0';
+  }
+
+  if (normalizedEstado === 'entregado' && !isNonEmptyString(metodoPago)) {
+    return 'Debes indicar la forma de pago para marcar el pedido como entregado';
+  }
+
   return null;
 }
 
@@ -255,6 +311,7 @@ function validateOrderInput(body) {
 module.exports = {
   validateBudgetInput,
   validateCustomerOrderInput,
+  validateCustomerOrderUpdateInput,
   validateDocumentItems,
   validateOrderInput,
   validateProviderOrderInput,

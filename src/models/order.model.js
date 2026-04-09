@@ -878,6 +878,11 @@ class OrderModel {
       const saldoPendiente = roundToTwo(Math.max(montoTotal - safeMontoEntregado, 0));
       const nextEstado = estado || order.estado;
 
+      if (safeMontoEntregado - montoTotal > 0.01) {
+        await dbClient.query('ROLLBACK');
+        return { error: 'EXCESS_DELIVERY_AMOUNT' };
+      }
+
       if (nextEstado === 'entregado' && saldoPendiente > 0) {
         await dbClient.query('ROLLBACK');
         return { error: 'BALANCE_PENDING', saldoPendiente };
