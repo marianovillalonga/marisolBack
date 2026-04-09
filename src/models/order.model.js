@@ -211,7 +211,7 @@ class OrderModel {
             OR LOWER(COALESCE(p.tematica, '')) LIKE $1
           )
         GROUP BY p.id, u.nombre
-        ORDER BY COALESCE(p.fecha_entrega, p.fecha_evento, p.fecha_pedido) DESC, p.id DESC
+        ORDER BY p.fecha_pedido DESC, p.id DESC
       `,
       [normalizedSearch],
     );
