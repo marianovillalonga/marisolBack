@@ -910,7 +910,7 @@ class OrderModel {
           montoPagado: montoTotal,
           pagos: [{ metodo: metodoPago, monto: montoTotal }],
           notas: `Entrega de pedido de cliente #${orderId} - ${order.agasajado_nombre || order.cliente_nombre || ''}`.trim(),
-          fechaVenta: (order.fecha_entrega || new Date().toISOString()).slice(0, 10),
+          fechaVenta: new Date(order.fecha_entrega || new Date()).toISOString().slice(0, 10),
           items,
         });
 
