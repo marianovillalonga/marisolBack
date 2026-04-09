@@ -35,6 +35,16 @@ function isValidPhone(value) {
   return /^[0-9+\-() ]{8,20}$/.test(String(value || '').trim());
 }
 
+const allowedPaymentMethods = [
+  'debito',
+  'efectivo',
+  'transferencia',
+  'tarjeta',
+  'cuenta_corriente',
+  'pendiente',
+  'mixto',
+];
+
 function validateDocumentItems(
   items,
   { emptyMessage, missingProductMessage, quantityMessage, priceMessage, manualNameMinLengthMessage, manualNameMaxLengthMessage },
@@ -88,7 +98,7 @@ function validateClientId(clientId) {
   return null;
 }
 
-function validateSaleInput({ clientId, descuento, montoPagado, pagos = [], fechaVenta, items }) {
+function validateSaleInput({ clientId, descuento, montoPagado, pagos = [], fechaVenta, notas, items }) {
   const clientError = validateClientId(clientId);
 
   if (clientError) {
@@ -125,6 +135,10 @@ function validateSaleInput({ clientId, descuento, montoPagado, pagos = [], fecha
       return 'Cada pago debe tener un metodo valido';
     }
 
+    if (!allowedPaymentMethods.includes(String(pago.metodo).trim().toLowerCase())) {
+      return 'Uno de los metodos de pago informados no es valido';
+    }
+
     if (!isPositiveNumber(pago?.monto)) {
       return 'Cada pago debe tener un monto mayor a 0';
     }
@@ -152,6 +166,10 @@ function validateSaleInput({ clientId, descuento, montoPagado, pagos = [], fecha
     return 'El total de la venta no puede ser menor a 0';
   }
 
+  if (!hasMaxLength(notas, 1000)) {
+    return 'Las notas no pueden superar los 1000 caracteres';
+  }
+
   return null;
 }
 
@@ -160,6 +178,7 @@ function validateBudgetInput({
   descuento,
   ajusteMetodoPago = 0,
   metodoPago,
+  notas,
   fechaEmision,
   diasValidez,
   items,
@@ -195,6 +214,10 @@ function validateBudgetInput({
     return 'El metodo de pago es obligatorio';
   }
 
+  if (!allowedPaymentMethods.includes(String(metodoPago).trim().toLowerCase())) {
+    return 'El metodo de pago informado no es valido';
+  }
+
   if (!isValidDate(fechaEmision)) {
     return 'La fecha de emision es obligatoria';
   }
@@ -211,6 +234,10 @@ function validateBudgetInput({
 
   if (total < 0) {
     return 'El total del presupuesto no puede ser menor a 0';
+  }
+
+  if (!hasMaxLength(notas, 1000)) {
+    return 'Las notas no pueden superar los 1000 caracteres';
   }
 
   return null;
