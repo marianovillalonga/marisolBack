@@ -846,11 +846,13 @@ class OrderModel {
         `
           SELECT
             p.*,
-            COALESCE(SUM(pd.cantidad * pd.costo_unitario), 0)::numeric(12,2) AS monto_total
+            COALESCE((
+              SELECT SUM(pd.cantidad * pd.costo_unitario)
+              FROM pedido_detalles pd
+              WHERE pd.pedido_id = p.id
+            ), 0)::numeric(12,2) AS monto_total
           FROM pedidos p
-          LEFT JOIN pedido_detalles pd ON pd.pedido_id = p.id
           WHERE p.id = $1
-          GROUP BY p.id
           LIMIT 1
           FOR UPDATE
         `,
