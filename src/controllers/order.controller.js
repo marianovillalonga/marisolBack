@@ -245,6 +245,10 @@ async function updateCustomerOrder(req, res, next) {
       return res.status(400).json(buildMessageResponse('El monto entregado no puede superar el total del pedido'));
     }
 
+    if (result.error === 'INVALID_STATUS_TRANSITION') {
+      return res.status(400).json(buildMessageResponse('No se puede realizar ese cambio de estado en el pedido'));
+    }
+
     if (result.error === 'SELLER_NOT_FOUND') {
       return res.status(404).json(buildMessageResponse('Usuario vendedor no encontrado'));
     }

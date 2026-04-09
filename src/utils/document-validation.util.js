@@ -23,7 +23,22 @@ function toTimestamp(value) {
   return new Date(value).getTime();
 }
 
-function validateDocumentItems(items, { emptyMessage, missingProductMessage, quantityMessage, priceMessage }) {
+function hasMinLength(value, length) {
+  return isNonEmptyString(value) && value.trim().length >= length;
+}
+
+function hasMaxLength(value, length) {
+  return value === undefined || value === null || String(value).trim().length <= length;
+}
+
+function isValidPhone(value) {
+  return /^[0-9+\-() ]{8,20}$/.test(String(value || '').trim());
+}
+
+function validateDocumentItems(
+  items,
+  { emptyMessage, missingProductMessage, quantityMessage, priceMessage, manualNameMinLengthMessage, manualNameMaxLengthMessage },
+) {
   if (!Array.isArray(items) || items.length === 0) {
     return emptyMessage;
   }
@@ -38,6 +53,14 @@ function validateDocumentItems(items, { emptyMessage, missingProductMessage, qua
 
     if (!hasProduct && !hasManualName) {
       return missingProductMessage;
+    }
+
+    if (!hasProduct && hasManualName && !hasMinLength(item?.productoNombre, 3)) {
+      return manualNameMinLengthMessage || 'La descripcion manual debe tener al menos 3 caracteres';
+    }
+
+    if (hasManualName && !hasMaxLength(item?.productoNombre, 150)) {
+      return manualNameMaxLengthMessage || 'La descripcion manual no puede superar los 150 caracteres';
     }
 
     if (!isPositiveNumber(item?.cantidad)) {
@@ -77,6 +100,8 @@ function validateSaleInput({ clientId, descuento, montoPagado, pagos = [], fecha
     missingProductMessage: 'Cada item debe tener un producto o un nombre manual',
     quantityMessage: 'La cantidad de cada item debe ser mayor a 0',
     priceMessage: 'El precio unitario de cada item debe ser igual o mayor a 0',
+    manualNameMinLengthMessage: 'La descripcion manual debe tener al menos 3 caracteres',
+    manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 150 caracteres',
   });
 
   if (itemsError) {
@@ -107,6 +132,10 @@ function validateSaleInput({ clientId, descuento, montoPagado, pagos = [], fecha
 
   if (!isValidDate(fechaVenta)) {
     return 'La fecha de venta es obligatoria';
+  }
+
+  if (!hasMaxLength(clientId, 20)) {
+    return 'El identificador del cliente no es valido';
   }
 
   const subtotal = items.reduce(
@@ -146,6 +175,8 @@ function validateBudgetInput({
     missingProductMessage: 'Cada item debe tener un producto o un nombre manual',
     quantityMessage: 'La cantidad de cada item debe ser mayor a 0',
     priceMessage: 'El precio unitario de cada item debe ser igual o mayor a 0',
+    manualNameMinLengthMessage: 'La descripcion manual debe tener al menos 3 caracteres',
+    manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 150 caracteres',
   });
 
   if (itemsError) {
@@ -195,6 +226,8 @@ function validateProviderOrderInput({ fechaPedido, items }) {
     missingProductMessage: 'Cada item debe tener un producto o una descripcion',
     quantityMessage: 'La cantidad de cada item debe ser mayor a 0',
     priceMessage: 'El costo de cada item debe ser mayor o igual a 0',
+    manualNameMinLengthMessage: 'La descripcion manual debe tener al menos 3 caracteres',
+    manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 150 caracteres',
   });
 }
 
@@ -203,9 +236,12 @@ function validateCustomerOrderInput({
   fechaEvento,
   fechaEntrega,
   clienteNombre,
+  clienteTelefono,
   agasajadoNombre,
   edadAgasajado,
+  tematica,
   montoEntregado = 0,
+  notas,
   items,
 }) {
   if (!isValidDate(fechaPedido)) {
@@ -236,8 +272,24 @@ function validateCustomerOrderInput({
     return 'El nombre del cliente es obligatorio';
   }
 
+  if (!hasMaxLength(clienteNombre, 150)) {
+    return 'El nombre del cliente no puede superar los 150 caracteres';
+  }
+
+  if (!isNonEmptyString(clienteTelefono)) {
+    return 'El telefono del cliente es obligatorio';
+  }
+
+  if (!isValidPhone(clienteTelefono)) {
+    return 'El telefono del cliente no es valido';
+  }
+
   if (!isNonEmptyString(agasajadoNombre)) {
     return 'El nombre del agasajado es obligatorio';
+  }
+
+  if (!hasMaxLength(agasajadoNombre, 150)) {
+    return 'El nombre del agasajado no puede superar los 150 caracteres';
   }
 
   if (
@@ -254,6 +306,8 @@ function validateCustomerOrderInput({
     missingProductMessage: 'Cada item del pedido debe tener un producto o una descripcion',
     quantityMessage: 'La cantidad de cada item debe ser mayor a 0',
     priceMessage: 'El precio de cada item debe ser mayor o igual a 0',
+    manualNameMinLengthMessage: 'La descripcion manual debe tener al menos 3 caracteres',
+    manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 150 caracteres',
   });
 
   if (itemsError) {
@@ -271,6 +325,14 @@ function validateCustomerOrderInput({
 
   if (Number(montoEntregado) - totalPedido > 0.01) {
     return 'El monto entregado no puede superar el total del pedido';
+  }
+
+  if (!hasMaxLength(tematica, 150)) {
+    return 'La tematica no puede superar los 150 caracteres';
+  }
+
+  if (!hasMaxLength(notas, 1000)) {
+    return 'Las notas no pueden superar los 1000 caracteres';
   }
 
   return null;
@@ -297,6 +359,10 @@ function validateCustomerOrderUpdateInput({ estado, montoEntregado, metodoPago }
 
   if (normalizedEstado === 'entregado' && !isNonEmptyString(metodoPago)) {
     return 'Debes indicar la forma de pago para marcar el pedido como entregado';
+  }
+
+  if (isNonEmptyString(metodoPago) && !hasMaxLength(metodoPago, 50)) {
+    return 'La forma de pago informada no es valida';
   }
 
   return null;

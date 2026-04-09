@@ -877,10 +877,23 @@ class OrderModel {
       const montoTotal = roundToTwo(order.monto_total);
       const saldoPendiente = roundToTwo(Math.max(montoTotal - safeMontoEntregado, 0));
       const nextEstado = estado || order.estado;
+      const allowedTransitions = {
+        pendiente: ['pendiente', 'hecho'],
+        hecho: ['hecho', 'entregado'],
+        entregado: ['entregado'],
+      };
 
       if (safeMontoEntregado - montoTotal > 0.01) {
         await dbClient.query('ROLLBACK');
         return { error: 'EXCESS_DELIVERY_AMOUNT' };
+      }
+
+      if (
+        allowedTransitions[order.estado] &&
+        !allowedTransitions[order.estado].includes(nextEstado)
+      ) {
+        await dbClient.query('ROLLBACK');
+        return { error: 'INVALID_STATUS_TRANSITION' };
       }
 
       if (nextEstado === 'entregado' && saldoPendiente > 0) {
