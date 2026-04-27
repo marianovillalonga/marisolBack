@@ -206,7 +206,7 @@ class BudgetModel {
           subtotal
         FROM presupuesto_detalles
         WHERE presupuesto_id = $1
-        ORDER BY id ASC
+        ORDER BY id DESC
       `,
       [id],
     );

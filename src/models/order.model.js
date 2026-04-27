@@ -248,7 +248,7 @@ class OrderModel {
           stock_actual
         FROM pedido_detalles
         WHERE pedido_id = $1
-        ORDER BY id ASC
+        ORDER BY id DESC
       `,
       [id],
     );
