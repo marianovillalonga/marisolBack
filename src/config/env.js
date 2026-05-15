@@ -19,6 +19,12 @@ const SEED_DEFAULT_ADMIN = ['1', 'true', 'yes', 'on'].includes(
 );
 const DB_SSL = process.env.DB_SSL;
 const DB_SSL_REJECT_UNAUTHORIZED = process.env.DB_SSL_REJECT_UNAUTHORIZED;
+const DATABASE_URL = process.env.DATABASE_URL || '';
+const DB_HOST = process.env.DB_HOST || '';
+const DB_PORT = process.env.DB_PORT || '';
+const DB_USER = process.env.DB_USER || '';
+const DB_PASSWORD = process.env.DB_PASSWORD || '';
+const DB_NAME = process.env.DB_NAME || '';
 
 function isHttpsUrl(url) {
   try {
@@ -30,6 +36,10 @@ function isHttpsUrl(url) {
 
 function validateRuntimeConfig() {
   const issues = [];
+  const hasDatabaseUrl = Boolean(DATABASE_URL.trim());
+  const hasLocalDbConfig = [DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME].every((value) =>
+    String(value || '').trim(),
+  );
 
   if (!AUTH_SECRET) {
     issues.push('AUTH_SECRET es obligatorio');
@@ -65,6 +75,12 @@ function validateRuntimeConfig() {
     issues.push('FRONTEND_URLS debe usar https en produccion');
   }
 
+  if (!hasDatabaseUrl && !hasLocalDbConfig) {
+    issues.push(
+      'Debes configurar DATABASE_URL o bien DB_HOST, DB_PORT, DB_USER, DB_PASSWORD y DB_NAME',
+    );
+  }
+
   if (issues.length) {
     throw new Error(`Configuracion insegura: ${issues.join('. ')}`);
   }
@@ -81,5 +97,6 @@ module.exports = {
   ADMIN_PASSWORD,
   ADMIN_NAME,
   SEED_DEFAULT_ADMIN,
+  DATABASE_URL,
   validateRuntimeConfig,
 };

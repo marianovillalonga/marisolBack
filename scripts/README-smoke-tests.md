@@ -30,3 +30,29 @@ SMOKE_ADMIN_EMAIL=admin@tudominio.com \
 SMOKE_ADMIN_PASSWORD=tu-password \
 npm run smoke
 ```
+
+## Setup local minimo
+1. Levantar Postgres:
+```bash
+docker compose up -d postgres
+```
+
+2. Verificar que el contenedor quede healthy:
+```bash
+docker compose ps
+```
+
+3. Levantar backend:
+```bash
+npm start
+```
+
+4. Validar health:
+```bash
+curl http://127.0.0.1:4000/api/health
+```
+
+5. Ejecutar smoke:
+```bash
+npm run smoke
+```

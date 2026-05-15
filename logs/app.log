@@ -218,3 +218,9 @@
 {"timestamp":"2026-04-08T22:51:21.829Z","level":"info","message":"http_request","requestId":"079fffd2-3cfb-4b57-b441-a0a9cd4643d5","method":"GET","path":"/api/categories","statusCode":304,"durationMs":125,"ip":"::1","userId":1}
 {"timestamp":"2026-04-08T22:51:21.954Z","level":"info","message":"http_request","requestId":"2b710420-cffb-4861-9cae-5d8afab899f5","method":"GET","path":"/api/categories","statusCode":304,"durationMs":122,"ip":"::1","userId":1}
 {"timestamp":"2026-04-08T22:51:22.162Z","level":"info","message":"http_request","requestId":"97afc2d7-3a2f-4beb-abfa-288f84b70313","method":"GET","path":"/api/products","statusCode":304,"durationMs":206,"ip":"::1","userId":1}
+{"timestamp":"2026-05-15T01:30:49.421Z","level":"info","message":"http_request","requestId":"manual-health-check","method":"GET","path":"/api/health","statusCode":200,"durationMs":4,"ip":"::ffff:127.0.0.1","userId":null}
+{"timestamp":"2026-05-15T01:31:30.162Z","level":"warn","message":"database_startup_retry","attempt":1,"maxAttempts":6,"retryDelayMs":5000,"error":"connect ECONNREFUSED 127.0.0.1:5432"}
+{"timestamp":"2026-05-15T01:31:35.177Z","level":"warn","message":"database_startup_retry","attempt":2,"maxAttempts":6,"retryDelayMs":5000,"error":"connect ECONNREFUSED 127.0.0.1:5432"}
+{"timestamp":"2026-05-15T01:31:40.186Z","level":"warn","message":"database_startup_retry","attempt":3,"maxAttempts":6,"retryDelayMs":5000,"error":"connect ECONNREFUSED 127.0.0.1:5432"}
+{"timestamp":"2026-05-15T01:31:45.196Z","level":"warn","message":"database_startup_retry","attempt":4,"maxAttempts":6,"retryDelayMs":5000,"error":"connect ECONNREFUSED 127.0.0.1:5432"}
+{"timestamp":"2026-05-15T01:32:03.238Z","level":"info","message":"http_request","requestId":"manual-health-check-2","method":"GET","path":"/api/health","statusCode":200,"durationMs":5,"ip":"::ffff:127.0.0.1","userId":null}
