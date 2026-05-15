@@ -9,6 +9,7 @@ const productModel = require('./models/product.model');
 const saleModel = require('./models/sale.model');
 const sessionModel = require('./models/session.model');
 const userModel = require('./models/user.model');
+const logger = require('./utils/logger.util');
 
 const STARTUP_DB_RETRIES = Number(process.env.DB_STARTUP_RETRIES) || 6;
 const STARTUP_DB_RETRY_DELAY_MS = Number(process.env.DB_STARTUP_RETRY_DELAY_MS) || 5000;
@@ -69,21 +70,63 @@ async function startServer() {
         throw error;
       }
 
-      console.warn(
-        `No se pudo conectar a la base en el intento ${attempt}/${STARTUP_DB_RETRIES}. Reintentando en ${Math.round(
-          STARTUP_DB_RETRY_DELAY_MS / 1000,
-        )}s...`,
-      );
+      logger.warn('database_startup_retry', {
+        attempt,
+        maxAttempts: STARTUP_DB_RETRIES,
+        retryDelayMs: STARTUP_DB_RETRY_DELAY_MS,
+        error: error instanceof Error ? error.message : String(error),
+      });
       await sleep(STARTUP_DB_RETRY_DELAY_MS);
     }
   }
 
-  app.listen(PORT, () => {
-    console.log(`Servidor escuchando en http://localhost:${PORT}`);
+  const server = app.listen(PORT, () => {
+    logger.info('server_started', {
+      port: PORT,
+    });
   });
+
+  const shutdown = (signal) => {
+    logger.warn('server_shutdown_requested', { signal });
+    server.close((error) => {
+      if (error) {
+        logger.error('server_shutdown_failed', {
+          signal,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : null,
+        });
+        process.exit(1);
+        return;
+      }
+
+      logger.info('server_shutdown_completed', { signal });
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
+process.on('unhandledRejection', (reason) => {
+  logger.error('unhandled_rejection', {
+    error: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : null,
+  });
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('uncaught_exception', {
+    error: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : null,
+  });
+  process.exit(1);
+});
+
 startServer().catch((error) => {
-  console.error('No se pudo iniciar el servidor:', error);
+  logger.error('server_start_failed', {
+    error: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : null,
+  });
   process.exit(1);
 });

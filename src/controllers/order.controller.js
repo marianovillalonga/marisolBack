@@ -1,6 +1,7 @@
 const orderModel = require('../models/order.model');
 const { registerAudit } = require('../utils/audit.util');
 const { validateCustomerOrderUpdateInput, validateOrderInput } = require('../utils/document-validation.util');
+const { parsePaginationParams } = require('../utils/validation.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const {
   buildOrderResponse,
@@ -9,8 +10,11 @@ const {
 
 async function listOrders(req, res, next) {
   try {
-    const orders = await orderModel.listOrders(req.query.search || '');
-    return res.status(200).json(buildOrdersResponse(orders));
+    const pagination = parsePaginationParams(req.query);
+    const result = await orderModel.listOrders(req.query.search || '', pagination);
+    return res
+      .status(200)
+      .json(buildOrdersResponse(result.orders, { ...pagination, total: result.total }));
   } catch (error) {
     next(error);
   }

@@ -1,4 +1,5 @@
 const userModel = require('../models/user.model');
+const validationRules = require('../../../shared/validation/rules.json');
 const { hashPassword } = require('../utils/hash.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const { isNonEmptyString, isPositiveInteger, isValidEmail } = require('../utils/validation.util');
@@ -9,7 +10,7 @@ const {
 } = require('../views/user.view');
 
 function isValidPassword(password) {
-  return typeof password === 'string' && password.length >= 8;
+  return typeof password === 'string' && password.length >= validationRules.auth.passwordMinLength;
 }
 
 async function createUser(req, res, next) {
@@ -35,7 +36,13 @@ async function createUser(req, res, next) {
     }
 
     if (!isValidPassword(password)) {
-      return res.status(400).json(buildMessageResponse('La password debe tener al menos 8 caracteres'));
+      return res
+        .status(400)
+        .json(
+          buildMessageResponse(
+            `La password debe tener al menos ${validationRules.auth.passwordMinLength} caracteres`,
+          ),
+        );
     }
 
     const passwordHash = await hashPassword(password);
@@ -109,7 +116,13 @@ async function updatePassword(req, res, next) {
     }
 
     if (!isValidPassword(newPassword)) {
-      return res.status(400).json(buildMessageResponse('La nueva password debe tener al menos 8 caracteres'));
+      return res
+        .status(400)
+        .json(
+          buildMessageResponse(
+            `La nueva password debe tener al menos ${validationRules.auth.passwordMinLength} caracteres`,
+          ),
+        );
     }
 
     if (newPassword !== confirmPassword) {

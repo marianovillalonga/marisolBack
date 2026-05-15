@@ -46,7 +46,7 @@ async function login(req, res, next) {
       },
     });
 
-    return res.status(200).json(buildLoginSuccessResponse(user, token));
+    return res.status(200).json(buildLoginSuccessResponse(user));
   } catch (error) {
     next(error);
   }

@@ -4,6 +4,7 @@ function notFoundHandler(req, res, _next) {
   res.status(404).json({
     ok: false,
     message: `Ruta no encontrada: ${req.originalUrl}`,
+    requestId: req.requestId || null,
   });
 }
 
@@ -22,6 +23,7 @@ function errorHandler(error, req, res, _next) {
     return res.status(413).json({
       ok: false,
       message: 'La solicitud es demasiado grande. Reduce el tamano de la imagen.',
+      requestId: req.requestId || null,
     });
   }
 
@@ -29,12 +31,14 @@ function errorHandler(error, req, res, _next) {
     return res.status(400).json({
       ok: false,
       message: 'El cuerpo de la solicitud no contiene JSON valido',
+      requestId: req.requestId || null,
     });
   }
 
   res.status(500).json({
     ok: false,
     message: 'Error interno del servidor',
+    requestId: req.requestId || null,
   });
 }
 

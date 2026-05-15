@@ -1,6 +1,7 @@
 const saleModel = require('../models/sale.model');
 const { registerAudit } = require('../utils/audit.util');
 const { validateSaleInput } = require('../utils/document-validation.util');
+const { parsePaginationParams } = require('../utils/validation.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const {
   buildSaleMessageResponse,
@@ -11,8 +12,15 @@ const {
 
 async function listSales(req, res, next) {
   try {
-    const sales = await saleModel.listSales(req.query.search || '', req.query.status || 'all');
-    return res.status(200).json(buildSalesResponse(sales));
+    const pagination = parsePaginationParams(req.query);
+    const result = await saleModel.listSales(
+      req.query.search || '',
+      req.query.status || 'all',
+      pagination,
+    );
+    return res
+      .status(200)
+      .json(buildSalesResponse(result.sales, { ...pagination, total: result.total }));
   } catch (error) {
     next(error);
   }

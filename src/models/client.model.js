@@ -152,11 +152,27 @@ class ClientModel {
     `;
   }
 
-  async listClients(search = '', debtStatus = 'all') {
+  async listClients(search = '', debtStatus = 'all', pagination = { limit: 20, offset: 0 }) {
     const normalizedSearch = `%${search.trim().toLowerCase()}%`;
     const normalizedDebtStatus = debtStatus.trim().toLowerCase();
+    const filtersQuery = `
+      WHERE
+        (
+          $1 = '%%'
+          OR LOWER(c.nombre) LIKE $1
+          OR LOWER(COALESCE(c.telefono, '')) LIKE $1
+          OR LOWER(COALESCE(c.email, '')) LIKE $1
+          OR LOWER(COALESCE(c.documento, '')) LIKE $1
+        )
+        AND (
+          $2 = 'all'
+          OR ($2 = 'with_debt' AND COALESCE(r.deuda_total, 0) > 0)
+          OR ($2 = 'up_to_date' AND COALESCE(r.deuda_total, 0) <= 0)
+        )
+    `;
 
-    const { rows } = await pool.query(
+    const [{ rows }, countResult] = await Promise.all([
+      pool.query(
       `
         SELECT
           c.id,
@@ -176,25 +192,28 @@ class ClientModel {
           r.ultima_compra
         FROM clientes c
         LEFT JOIN (${this.buildSummarySubquery()}) r ON r.cliente_id = c.id
-        WHERE
-          (
-            $1 = '%%'
-            OR LOWER(c.nombre) LIKE $1
-            OR LOWER(COALESCE(c.telefono, '')) LIKE $1
-            OR LOWER(COALESCE(c.email, '')) LIKE $1
-            OR LOWER(COALESCE(c.documento, '')) LIKE $1
-          )
-          AND (
-            $2 = 'all'
-            OR ($2 = 'with_debt' AND COALESCE(r.deuda_total, 0) > 0)
-            OR ($2 = 'up_to_date' AND COALESCE(r.deuda_total, 0) <= 0)
-          )
+        ${filtersQuery}
         ORDER BY COALESCE(r.deuda_total, 0) DESC, c.nombre ASC
+        LIMIT $3
+        OFFSET $4
       `,
-      [normalizedSearch, normalizedDebtStatus],
-    );
+      [normalizedSearch, normalizedDebtStatus, pagination.limit, pagination.offset],
+    ),
+      pool.query(
+        `
+          SELECT COUNT(*)::int AS total
+          FROM clientes c
+          LEFT JOIN (${this.buildSummarySubquery()}) r ON r.cliente_id = c.id
+          ${filtersQuery}
+        `,
+        [normalizedSearch, normalizedDebtStatus],
+      ),
+    ]);
 
-    return rows.map((row) => this.mapClient(row));
+    return {
+      clients: rows.map((row) => this.mapClient(row)),
+      total: Number(countResult.rows[0]?.total || 0),
+    };
   }
 
   async findById(id) {

@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 const { hashPassword, isBcryptHash, verifyPassword } = require('../utils/hash.util');
-const { ADMIN_EMAIL, ADMIN_NAME, ADMIN_PASSWORD } = require('../config/env');
+const { ADMIN_EMAIL, ADMIN_NAME, ADMIN_PASSWORD, SEED_DEFAULT_ADMIN } = require('../config/env');
 
 class UserModel {
   async ensureAuthTables() {
@@ -66,6 +66,10 @@ class UserModel {
   }
 
   async ensureAdminUser() {
+    if (!SEED_DEFAULT_ADMIN) {
+      return;
+    }
+
     const existingAdmin = await this.findByEmail(ADMIN_EMAIL);
 
     if (existingAdmin) {

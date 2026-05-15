@@ -1,7 +1,10 @@
-function buildClientsResponse(clients) {
+const { buildPaginationMeta } = require('./pagination.view');
+
+function buildClientsResponse(clients, pagination) {
   return {
     ok: true,
     clients,
+    pagination: buildPaginationMeta(pagination),
   };
 }
 

@@ -55,9 +55,18 @@ class CategoryModel {
 
   async listCategories() {
     const { rows } = await pool.query(`
-      SELECT id, nombre, codigo
-      FROM categorias
-      ORDER BY nombre ASC
+      SELECT
+        c.id,
+        c.nombre,
+        c.codigo,
+        COALESCE(
+          ARRAY_AGG(s.nombre ORDER BY s.nombre) FILTER (WHERE s.nombre IS NOT NULL),
+          ARRAY[]::VARCHAR[]
+        ) AS subcategorias
+      FROM categorias c
+      LEFT JOIN subcategorias s ON s.categoria_id = c.id
+      GROUP BY c.id, c.nombre, c.codigo
+      ORDER BY c.nombre ASC
     `);
 
     return rows;

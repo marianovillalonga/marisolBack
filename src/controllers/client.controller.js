@@ -5,7 +5,7 @@ const {
   buildClientResponse,
   buildClientsResponse,
 } = require('../views/client.view');
-const { isPositiveInteger, isValidEmail } = require('../utils/validation.util');
+const { isPositiveInteger, isValidEmail, parsePaginationParams } = require('../utils/validation.util');
 
 function validateClientInput({ nombre, email, limiteCredito }) {
   if (!nombre || !nombre.trim()) {
@@ -63,8 +63,15 @@ function validatePurchaseInput({ productoId, productoNombre, cantidad, precioUni
 
 async function listClients(req, res, next) {
   try {
-    const clients = await clientModel.listClients(req.query.search || '', req.query.debtStatus || 'all');
-    return res.status(200).json(buildClientsResponse(clients));
+    const pagination = parsePaginationParams(req.query);
+    const result = await clientModel.listClients(
+      req.query.search || '',
+      req.query.debtStatus || 'all',
+      pagination,
+    );
+    return res
+      .status(200)
+      .json(buildClientsResponse(result.clients, { ...pagination, total: result.total }));
   } catch (error) {
     next(error);
   }

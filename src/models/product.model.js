@@ -77,9 +77,28 @@ class ProductModel {
     `);
   }
 
-  async listProducts(search = '', category = '') {
+  async listProducts(search = '', category = '', subcategory = '', pagination = { limit: 20, offset: 0 }) {
     const normalizedSearch = `%${search.trim().toLowerCase()}%`;
     const normalizedCategory = category.trim().toLowerCase();
+    const normalizedSubcategory = subcategory.trim().toLowerCase();
+    const filtersQuery = `
+      WHERE
+        (
+          $1 = '%%'
+          OR LOWER(nombre) LIKE $1
+          OR LOWER(COALESCE(subcategoria, '')) LIKE $1
+          OR LOWER(COALESCE(detalle, '')) LIKE $1
+          OR LOWER(COALESCE(codigo_barras, '')) LIKE $1
+        )
+        AND (
+          $2 = ''
+          OR LOWER(COALESCE(categoria, '')) = $2
+        )
+        AND (
+          $3 = ''
+          OR LOWER(COALESCE(subcategoria, '')) = $3
+        )
+    `;
     const query = `
       SELECT
         id,
@@ -95,23 +114,28 @@ class ProductModel {
         fecha_creacion,
         fecha_actualizacion
       FROM productos
-      WHERE
-        (
-          $1 = '%%'
-          OR LOWER(nombre) LIKE $1
-          OR LOWER(COALESCE(subcategoria, '')) LIKE $1
-          OR LOWER(COALESCE(detalle, '')) LIKE $1
-          OR LOWER(COALESCE(codigo_barras, '')) LIKE $1
-        )
-        AND (
-          $2 = ''
-          OR LOWER(COALESCE(categoria, '')) = $2
-        )
+      ${filtersQuery}
       ORDER BY id ASC
+      LIMIT $4
+      OFFSET $5
     `;
 
-    const { rows } = await pool.query(query, [normalizedSearch, normalizedCategory]);
-    return rows.map((product) => this.mapProduct(product));
+    const [{ rows }, countResult] = await Promise.all([
+      pool.query(query, [normalizedSearch, normalizedCategory, normalizedSubcategory, pagination.limit, pagination.offset]),
+      pool.query(
+        `
+          SELECT COUNT(*)::int AS total
+          FROM productos
+          ${filtersQuery}
+        `,
+        [normalizedSearch, normalizedCategory, normalizedSubcategory],
+      ),
+    ]);
+
+    return {
+      products: rows.map((product) => this.mapProduct(product)),
+      total: Number(countResult.rows[0]?.total || 0),
+    };
   }
 
   async listCategories() {

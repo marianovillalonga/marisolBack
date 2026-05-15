@@ -3,6 +3,7 @@ const { registerAudit } = require('../utils/audit.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const { buildEan13, isValidEan13, sanitizeBarcode } = require('../utils/barcode.util');
 const { normalizeImageUrl, validateImageUrl } = require('../utils/image.util');
+const { parsePaginationParams } = require('../utils/validation.util');
 const {
   buildCategoriesResponse,
   buildProductMessageResponse,
@@ -56,8 +57,16 @@ function normalizeBarcodeInput(codigoBarras) {
 
 async function listProducts(req, res, next) {
   try {
-    const products = await productModel.listProducts(req.query.search || '', req.query.category || '');
-    return res.status(200).json(buildProductsResponse(products));
+    const pagination = parsePaginationParams(req.query);
+    const result = await productModel.listProducts(
+      req.query.search || '',
+      req.query.category || '',
+      req.query.subcategory || '',
+      pagination,
+    );
+    return res
+      .status(200)
+      .json(buildProductsResponse(result.products, { ...pagination, total: result.total }));
   } catch (error) {
     next(error);
   }

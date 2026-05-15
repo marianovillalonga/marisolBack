@@ -303,20 +303,20 @@ function validateCustomerOrderInput({
     return 'El nombre del cliente no puede superar los 150 caracteres';
   }
 
-  if (!isNonEmptyString(clienteTelefono)) {
-    return 'El telefono del cliente es obligatorio';
-  }
-
-  if (!isValidPhone(clienteTelefono)) {
-    return 'El telefono del cliente no es valido';
-  }
-
   if (!isNonEmptyString(agasajadoNombre)) {
     return 'El nombre del agasajado es obligatorio';
   }
 
   if (!hasMaxLength(agasajadoNombre, 150)) {
     return 'El nombre del agasajado no puede superar los 150 caracteres';
+  }
+
+  if (!isNonEmptyString(clienteTelefono)) {
+    return 'El telefono del cliente es obligatorio';
+  }
+
+  if (!isValidPhone(clienteTelefono)) {
+    return 'El telefono del cliente no es valido';
   }
 
   if (

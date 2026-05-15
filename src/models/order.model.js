@@ -193,30 +193,50 @@ class OrderModel {
     `;
   }
 
-  async listOrders(search = '') {
+  async listOrders(search = '', pagination = { limit: 20, offset: 0 }) {
     const normalizedSearch = `%${search.trim().toLowerCase()}%`;
+    const filtersQuery = `
+      WHERE
+        (
+          $1 = '%%'
+          OR CAST(p.id AS TEXT) LIKE REPLACE($1, '%', '')
+          OR LOWER(COALESCE(u.nombre, '')) LIKE $1
+          OR LOWER(COALESCE(p.notas, '')) LIKE $1
+          OR LOWER(COALESCE(pd.producto_nombre, '')) LIKE $1
+          OR LOWER(COALESCE(p.cliente_nombre, '')) LIKE $1
+          OR LOWER(COALESCE(p.agasajado_nombre, '')) LIKE $1
+          OR LOWER(COALESCE(p.tematica, '')) LIKE $1
+        )
+    `;
 
-    const { rows } = await pool.query(
+    const [{ rows }, countResult] = await Promise.all([
+      pool.query(
       `
         ${this.buildListQuery()}
-        WHERE
-          (
-            $1 = '%%'
-            OR CAST(p.id AS TEXT) LIKE REPLACE($1, '%', '')
-            OR LOWER(COALESCE(u.nombre, '')) LIKE $1
-            OR LOWER(COALESCE(p.notas, '')) LIKE $1
-            OR LOWER(COALESCE(pd.producto_nombre, '')) LIKE $1
-            OR LOWER(COALESCE(p.cliente_nombre, '')) LIKE $1
-            OR LOWER(COALESCE(p.agasajado_nombre, '')) LIKE $1
-            OR LOWER(COALESCE(p.tematica, '')) LIKE $1
-          )
+        ${filtersQuery}
         GROUP BY p.id, u.nombre
         ORDER BY p.fecha_pedido DESC, p.id DESC
+        LIMIT $2
+        OFFSET $3
       `,
-      [normalizedSearch],
-    );
+      [normalizedSearch, pagination.limit, pagination.offset],
+    ),
+      pool.query(
+        `
+          SELECT COUNT(DISTINCT p.id)::int AS total
+          FROM pedidos p
+          LEFT JOIN usuarios u ON u.id = p.usuario_id
+          LEFT JOIN pedido_detalles pd ON pd.pedido_id = p.id
+          ${filtersQuery}
+        `,
+        [normalizedSearch],
+      ),
+    ]);
 
-    return rows.map((row) => this.mapOrder(row));
+    return {
+      orders: rows.map((row) => this.mapOrder(row)),
+      total: Number(countResult.rows[0]?.total || 0),
+    };
   }
 
   async findById(id) {
@@ -921,7 +941,7 @@ class OrderModel {
           precioUnitario: Number(item.costo_unitario),
         }));
 
-        const saleResult = await saleModel.createSale({
+        const saleResult = await saleModel.createSaleWithClient(dbClient, {
           clientId: null,
           sellerId: userId,
           descuento: 0,

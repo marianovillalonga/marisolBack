@@ -201,31 +201,51 @@ class SaleModel {
     `;
   }
 
-  async listSales(search = '', status = 'all') {
+  async listSales(search = '', status = 'all', pagination = { limit: 20, offset: 0 }) {
     const normalizedSearch = `%${search.trim().toLowerCase()}%`;
     const normalizedStatus = status.trim().toLowerCase();
+    const filtersQuery = `
+      WHERE
+        (
+          $1 = '%%'
+          OR LOWER(COALESCE(c.nombre, 'consumidor final')) LIKE $1
+          OR LOWER(COALESCE(u.nombre, '')) LIKE $1
+          OR CAST(v.id AS TEXT) LIKE REPLACE($1, '%', '')
+        )
+        AND (
+          $2 = 'all'
+          OR LOWER(v.estado) = $2
+        )
+    `;
 
-    const { rows } = await pool.query(
+    const [{ rows }, countResult] = await Promise.all([
+      pool.query(
       `
         ${this.buildListQuery()}
-        WHERE
-          (
-            $1 = '%%'
-            OR LOWER(COALESCE(c.nombre, 'consumidor final')) LIKE $1
-            OR LOWER(COALESCE(u.nombre, '')) LIKE $1
-            OR CAST(v.id AS TEXT) LIKE REPLACE($1, '%', '')
-          )
-          AND (
-            $2 = 'all'
-            OR LOWER(v.estado) = $2
-          )
+        ${filtersQuery}
         GROUP BY v.id, c.nombre, u.nombre
         ORDER BY v.fecha_venta DESC, v.id DESC
+        LIMIT $3
+        OFFSET $4
       `,
-      [normalizedSearch, normalizedStatus],
-    );
+      [normalizedSearch, normalizedStatus, pagination.limit, pagination.offset],
+    ),
+      pool.query(
+        `
+          SELECT COUNT(*)::int AS total
+          FROM ventas v
+          LEFT JOIN clientes c ON c.id = v.cliente_id
+          LEFT JOIN usuarios u ON u.id = v.vendedor_id
+          ${filtersQuery}
+        `,
+        [normalizedSearch, normalizedStatus],
+      ),
+    ]);
 
-    return rows.map((row) => this.mapSale(row));
+    return {
+      sales: rows.map((row) => this.mapSale(row)),
+      total: Number(countResult.rows[0]?.total || 0),
+    };
   }
 
   async getSalesSummary(from, to) {
@@ -623,6 +643,141 @@ class SaleModel {
     }
   }
 
+  async createSaleWithClient(
+    client,
+    {
+      clientId,
+      sellerId,
+      descuento,
+      montoPagado,
+      notas,
+      fechaVenta,
+      pagos = [],
+      items,
+    },
+  ) {
+    const context = await this.resolveSaleContext(client, { clientId, sellerId });
+
+    if (context.error) {
+      return context;
+    }
+
+    const stockContext = await this.lockProductsForSale(client, items);
+
+    if (stockContext.error) {
+      return stockContext;
+    }
+
+    const itemSnapshots = this.buildItemSnapshots(items, stockContext.productsById);
+    const computedTotals = this.calculateSaleTotals({
+      descuento,
+      montoPagado,
+      pagos,
+      itemSnapshots,
+      seller: context.seller,
+    });
+
+    if (computedTotals.error) {
+      return computedTotals;
+    }
+
+    if (computedTotals.deudaPendiente > 0 && !context.customer) {
+      return { error: 'CLIENT_REQUIRED_FOR_BALANCE' };
+    }
+
+    const saleResult = await client.query(
+      `
+        INSERT INTO ventas (
+          cliente_id,
+          vendedor_id,
+          subtotal,
+          ajuste_metodo_pago,
+          ajuste_metodo_pago_tipo,
+          ajuste_metodo_pago_porcentaje,
+          descuento,
+          total,
+          monto_pagado,
+          deuda_pendiente,
+          metodo_pago,
+          pagos,
+          estado,
+          notas,
+          fecha_venta
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'confirmada', $13, $14)
+        RETURNING id
+      `,
+      [
+        clientId || null,
+        sellerId,
+        computedTotals.subtotal,
+        computedTotals.ajusteMetodoPago,
+        computedTotals.ajusteMetodoPagoTipo,
+        computedTotals.ajusteMetodoPagoPorcentaje,
+        descuento,
+        computedTotals.total,
+        montoPagado,
+        computedTotals.deudaPendiente,
+        computedTotals.metodoPago,
+        JSON.stringify(computedTotals.normalizedPayments),
+        notas || null,
+        fechaVenta,
+      ],
+    );
+
+    const saleId = saleResult.rows[0].id;
+    await this.upsertSaleDetails(client, saleId, itemSnapshots);
+
+    for (const groupedItem of stockContext.groupedItems) {
+      await client.query(
+        `
+          UPDATE productos
+          SET cantidad = cantidad - $2
+          WHERE id = $1
+        `,
+        [groupedItem.productoId, groupedItem.cantidadTotal],
+      );
+    }
+
+    if (context.customer) {
+      for (let index = 0; index < itemSnapshots.length; index += 1) {
+        const item = itemSnapshots[index];
+
+        await client.query(
+          `
+            INSERT INTO cliente_compras (
+              cliente_id,
+              venta_id,
+              producto_id,
+              producto_nombre,
+              cantidad,
+              precio_unitario,
+              total_compra,
+              monto_pagado,
+              fecha_compra,
+              notas
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `,
+          [
+            context.customer.id,
+            saleId,
+            item.productoId,
+            item.productoNombre,
+            item.cantidad,
+            item.precioUnitario,
+            computedTotals.itemNetTotals[index],
+            computedTotals.itemPayments[index],
+            fechaVenta,
+            notesForClientSale(notas),
+          ],
+        );
+      }
+    }
+
+    return { saleId };
+  }
+
   async createSale({
     clientId,
     sellerId,
@@ -637,133 +792,25 @@ class SaleModel {
 
     try {
       await client.query('BEGIN');
-
-      const context = await this.resolveSaleContext(client, { clientId, sellerId });
-
-      if (context.error) {
-        await client.query('ROLLBACK');
-        return context;
-      }
-
-      const stockContext = await this.lockProductsForSale(client, items);
-
-      if (stockContext.error) {
-        await client.query('ROLLBACK');
-        return stockContext;
-      }
-
-      const itemSnapshots = this.buildItemSnapshots(items, stockContext.productsById);
-      const computedTotals = this.calculateSaleTotals({
+      const result = await this.createSaleWithClient(client, {
+        clientId,
+        sellerId,
         descuento,
         montoPagado,
+        notas,
+        fechaVenta,
         pagos,
-        itemSnapshots,
-        seller: context.seller,
+        items,
       });
 
-      if (computedTotals.error) {
+      if (result.error) {
         await client.query('ROLLBACK');
-        return computedTotals;
-      }
-
-      if (computedTotals.deudaPendiente > 0 && !context.customer) {
-        await client.query('ROLLBACK');
-        return { error: 'CLIENT_REQUIRED_FOR_BALANCE' };
-      }
-
-      const saleResult = await client.query(
-        `
-          INSERT INTO ventas (
-            cliente_id,
-            vendedor_id,
-            subtotal,
-            ajuste_metodo_pago,
-            ajuste_metodo_pago_tipo,
-            ajuste_metodo_pago_porcentaje,
-            descuento,
-            total,
-            monto_pagado,
-            deuda_pendiente,
-            metodo_pago,
-            pagos,
-            estado,
-            notas,
-            fecha_venta
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'confirmada', $13, $14)
-          RETURNING id
-        `,
-        [
-          clientId || null,
-          sellerId,
-          computedTotals.subtotal,
-          computedTotals.ajusteMetodoPago,
-          computedTotals.ajusteMetodoPagoTipo,
-          computedTotals.ajusteMetodoPagoPorcentaje,
-          descuento,
-          computedTotals.total,
-          montoPagado,
-          computedTotals.deudaPendiente,
-          computedTotals.metodoPago,
-          JSON.stringify(computedTotals.normalizedPayments),
-          notas || null,
-          fechaVenta,
-        ],
-      );
-
-      const saleId = saleResult.rows[0].id;
-      await this.upsertSaleDetails(client, saleId, itemSnapshots);
-
-      for (const groupedItem of stockContext.groupedItems) {
-        await client.query(
-          `
-            UPDATE productos
-            SET cantidad = cantidad - $2
-            WHERE id = $1
-          `,
-          [groupedItem.productoId, groupedItem.cantidadTotal],
-        );
-      }
-
-      if (context.customer) {
-        for (let index = 0; index < itemSnapshots.length; index += 1) {
-          const item = itemSnapshots[index];
-
-          await client.query(
-            `
-              INSERT INTO cliente_compras (
-                cliente_id,
-                venta_id,
-                producto_id,
-                producto_nombre,
-                cantidad,
-                precio_unitario,
-                total_compra,
-                monto_pagado,
-                fecha_compra,
-                notas
-              )
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            `,
-            [
-              context.customer.id,
-              saleId,
-              item.productoId,
-              item.productoNombre,
-              item.cantidad,
-              item.precioUnitario,
-              computedTotals.itemNetTotals[index],
-              computedTotals.itemPayments[index],
-              fechaVenta,
-              notesForClientSale(notas),
-            ],
-          );
-        }
+        return result;
       }
 
       await client.query('COMMIT');
 
-      return { saleId };
+      return result;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
