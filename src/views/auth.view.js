@@ -5,11 +5,10 @@ function buildMessageResponse(message) {
   };
 }
 
-function buildLoginSuccessResponse(user, token) {
+function buildLoginSuccessResponse(user) {
   return {
     ok: true,
     message: 'Login correcto',
-    token,
     user,
   };
 }
