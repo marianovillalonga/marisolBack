@@ -32,6 +32,10 @@ class SessionModel {
 
     return Boolean(rows[0]);
   }
+
+  async deleteExpiredRevokedTokens() {
+    await pool.query('DELETE FROM tokens_revocados WHERE expira_en <= NOW()');
+  }
 }
 
 module.exports = new SessionModel();

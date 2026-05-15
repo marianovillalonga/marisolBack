@@ -19,9 +19,15 @@ async function authMiddleware(req, res, next) {
   try {
     const payload = verifyAuthToken(token);
     const revoked = await sessionModel.isTokenRevoked(payload.jti);
-    const currentUser = await userModel.findPublicById(Number(payload.sub));
+    const currentUser = await userModel.findSessionUserById(Number(payload.sub));
+    const passwordUpdatedAt = currentUser?.passwordUpdatedAt
+      ? new Date(currentUser.passwordUpdatedAt).getTime()
+      : 0;
+    const tokenIssuedAt = Number(payload.iat || 0) * 1000;
+    const tokenInvalidatedByPasswordChange =
+      Boolean(passwordUpdatedAt) && tokenIssuedAt > 0 && tokenIssuedAt < passwordUpdatedAt;
 
-    if (revoked || !currentUser) {
+    if (revoked || !currentUser || tokenInvalidatedByPasswordChange) {
       return res.status(401).json(buildMessageResponse('Token invalido o vencido'));
     }
 

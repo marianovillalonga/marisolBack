@@ -41,6 +41,7 @@ class UserModel {
         avatar_url TEXT,
         configuracion_metodos_pago JSONB NOT NULL DEFAULT '{}'::jsonb,
         password TEXT NOT NULL,
+        password_actualizada_en TIMESTAMP NOT NULL DEFAULT NOW(),
         activo BOOLEAN NOT NULL DEFAULT true,
         fecha_creacion TIMESTAMP NOT NULL DEFAULT NOW(),
         fecha_actualizacion TIMESTAMP NOT NULL DEFAULT NOW()
@@ -62,7 +63,8 @@ class UserModel {
       ADD COLUMN IF NOT EXISTS telefono VARCHAR(50),
       ADD COLUMN IF NOT EXISTS direccion TEXT,
       ADD COLUMN IF NOT EXISTS avatar_url TEXT,
-      ADD COLUMN IF NOT EXISTS configuracion_metodos_pago JSONB NOT NULL DEFAULT '{}'::jsonb
+      ADD COLUMN IF NOT EXISTS configuracion_metodos_pago JSONB NOT NULL DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS password_actualizada_en TIMESTAMP NOT NULL DEFAULT NOW()
     `);
   }
 
@@ -454,7 +456,7 @@ class UserModel {
     await pool.query(
       `
         UPDATE usuarios
-        SET password = $1, fecha_actualizacion = NOW()
+        SET password = $1, password_actualizada_en = NOW(), fecha_actualizacion = NOW()
         WHERE id = $2
       `,
       [newPasswordHash, userId],
@@ -626,6 +628,56 @@ class UserModel {
         rol: roleResult.rows[0]?.rol || null,
       }),
     };
+  }
+
+  async findSessionUserById(id) {
+    await this.ensureAuthSchemaReady();
+
+    const { rows } = await pool.query(
+      `
+        SELECT
+          u.id,
+          u.email,
+          u.activo,
+          u.password_actualizada_en,
+          r.nombre AS rol
+        FROM usuarios u
+        LEFT JOIN usuario_roles ur ON ur.usuario_id = u.id
+        LEFT JOIN roles r ON r.id = ur.rol_id
+        WHERE u.id = $1
+        LIMIT 1
+      `,
+      [id],
+    );
+
+    const user = rows[0];
+
+    if (!user || !user.activo) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.rol || null,
+      passwordUpdatedAt: user.password_actualizada_en,
+    };
+  }
+
+  async updatePasswordByUserId({ userId, passwordHash }, client = pool) {
+    const { rowCount } = await client.query(
+      `
+        UPDATE usuarios
+        SET
+          password = $1,
+          password_actualizada_en = NOW(),
+          fecha_actualizacion = NOW()
+        WHERE id = $2 AND activo = true
+      `,
+      [passwordHash, userId],
+    );
+
+    return rowCount > 0;
   }
 }
 

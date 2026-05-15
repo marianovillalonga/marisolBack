@@ -39,6 +39,23 @@ const loginRateLimit = createRateLimitMiddleware({
   message: 'Demasiados intentos de login. Espera unos minutos antes de reintentar.',
 });
 
+const passwordResetRequestRateLimit = createRateLimitMiddleware({
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 5,
+  keyBuilder: (req) => {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    return `password-reset-request:${req.ip || 'unknown'}:${email || 'anonymous'}`;
+  },
+  message: 'Demasiadas solicitudes de recuperacion. Espera unos minutos antes de reintentar.',
+});
+
+const passwordResetAttemptRateLimit = createRateLimitMiddleware({
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 10,
+  keyBuilder: (req) => `password-reset-attempt:${req.ip || 'unknown'}`,
+  message: 'Demasiados intentos de restablecimiento. Espera unos minutos antes de reintentar.',
+});
+
 const apiRateLimit = createRateLimitMiddleware({
   windowMs: 60 * 1000,
   maxRequests: 240,
@@ -48,4 +65,6 @@ module.exports = {
   apiRateLimit,
   createRateLimitMiddleware,
   loginRateLimit,
+  passwordResetAttemptRateLimit,
+  passwordResetRequestRateLimit,
 };

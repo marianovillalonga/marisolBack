@@ -224,3 +224,27 @@
 {"timestamp":"2026-05-15T01:31:40.186Z","level":"warn","message":"database_startup_retry","attempt":3,"maxAttempts":6,"retryDelayMs":5000,"error":"connect ECONNREFUSED 127.0.0.1:5432"}
 {"timestamp":"2026-05-15T01:31:45.196Z","level":"warn","message":"database_startup_retry","attempt":4,"maxAttempts":6,"retryDelayMs":5000,"error":"connect ECONNREFUSED 127.0.0.1:5432"}
 {"timestamp":"2026-05-15T01:32:03.238Z","level":"info","message":"http_request","requestId":"manual-health-check-2","method":"GET","path":"/api/health","statusCode":200,"durationMs":5,"ip":"::ffff:127.0.0.1","userId":null}
+{"timestamp":"2026-05-15T14:17:45.356Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-15T14:18:07.132Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-15T14:18:44.637Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-15T14:19:35.010Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-15T14:19:50.213Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-15T14:20:04.017Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-15T14:20:52.994Z","level":"info","message":"http_request","requestId":"207a1ccd-3bca-46c4-b80a-3bcc5eb585c4","method":"GET","path":"/api/products","statusCode":401,"durationMs":331,"ip":"::1","userId":null}
+{"timestamp":"2026-05-15T14:20:52.996Z","level":"info","message":"http_request","requestId":"b832576a-50db-42c2-b4fa-795359f93bb9","method":"GET","path":"/api/products","statusCode":401,"durationMs":338,"ip":"::1","userId":null}
+{"timestamp":"2026-05-15T14:20:53.207Z","level":"info","message":"http_request","requestId":"63a70a01-23e0-4057-9937-68c7d1e2a7c8","method":"GET","path":"/api/orders?page=1&pageSize=20","statusCode":401,"durationMs":305,"ip":"::1","userId":null}
+{"timestamp":"2026-05-15T14:23:49.658Z","level":"info","message":"http_request","requestId":"47df3470-ebf4-4079-b022-f1724c9196f6","method":"GET","path":"/api/auth/me","statusCode":401,"durationMs":386,"ip":"::1","userId":null}
+{"timestamp":"2026-05-15T14:23:49.749Z","level":"info","message":"http_request","requestId":"42892fbe-99f3-4e8c-81d4-14f14fedb09e","method":"GET","path":"/api/auth/me","statusCode":401,"durationMs":87,"ip":"::1","userId":null}
+{"timestamp":"2026-05-15T14:25:11.892Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-15T14:25:49.432Z","level":"info","message":"http_request","requestId":"7c791d8f-27cd-4fb4-b318-59578f585d07","method":"POST","path":"/api/auth/forgot-password","statusCode":500,"durationMs":347,"ip":"::1","userId":null}
+{"timestamp":"2026-05-15T14:26:01.766Z","level":"warn","message":"server_shutdown_requested","signal":"SIGINT"}
+{"timestamp":"2026-05-15T14:26:09.389Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-15T14:26:13.736Z","level":"warn","message":"server_shutdown_requested","signal":"SIGINT"}
+{"timestamp":"2026-05-15T14:26:29.533Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-15T14:27:01.978Z","level":"info","message":"http_request","requestId":"9bb60390-70e0-4f68-8831-9ce9b3121bf9","method":"POST","path":"/api/auth/forgot-password","statusCode":500,"durationMs":329,"ip":"::1","userId":null}
+{"timestamp":"2026-05-15T14:27:20.887Z","level":"warn","message":"server_shutdown_requested","signal":"SIGINT"}
+{"timestamp":"2026-05-15T14:28:18.008Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-15T14:28:23.109Z","level":"info","message":"password_reset_email_preview_saved","requestId":"38d94526-9a2d-4a27-a42b-e6903f6fde76","deliveryMode":"file","previewFileName":"1778855303108-8f3c38f4-6372-4e32-bfda-c981bfb0740d.json"}
+{"timestamp":"2026-05-15T14:28:23.201Z","level":"info","message":"http_request","requestId":"38d94526-9a2d-4a27-a42b-e6903f6fde76","method":"POST","path":"/api/auth/forgot-password","statusCode":202,"durationMs":252,"ip":"::1","userId":null}
+{"timestamp":"2026-05-15T14:28:27.743Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-15T14:34:08.620Z","level":"info","message":"server_started","port":4000}

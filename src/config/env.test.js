@@ -40,6 +40,7 @@ test('validateRuntimeConfig permite configuracion segura en produccion', () => {
   process.env.DATABASE_URL = 'postgres://user:password@db.example.com:5432/marisol';
   process.env.DB_SSL = 'true';
   process.env.FRONTEND_URLS = 'https://marisol-front.vercel.app,https://app.marisol.com';
+  process.env.FRONTEND_RESET_PASSWORD_URL = 'https://app.marisol.com/auth/reset-password';
   delete process.env.DB_SSL_REJECT_UNAUTHORIZED;
 
   const { validateRuntimeConfig } = loadEnvModule();
@@ -57,6 +58,7 @@ test('validateRuntimeConfig falla si FRONTEND_URLS no usa https en produccion', 
   process.env.DATABASE_URL = 'postgres://user:password@db.example.com:5432/marisol';
   process.env.DB_SSL = 'true';
   process.env.FRONTEND_URLS = 'http://app.insegura.local';
+  process.env.FRONTEND_RESET_PASSWORD_URL = 'https://app.marisol.com/auth/reset-password';
   delete process.env.DB_SSL_REJECT_UNAUTHORIZED;
 
   const { validateRuntimeConfig } = loadEnvModule();

@@ -1,6 +1,9 @@
 const userModel = require('../models/user.model');
+const sessionModel = require('../models/session.model');
 const validationRules = require('../config/validation-rules');
 const { hashPassword } = require('../utils/hash.util');
+const { clearAuthCookie } = require('../utils/cookie.util');
+const { registerAudit } = require('../utils/audit.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const { isNonEmptyString, isPositiveInteger, isValidEmail } = require('../utils/validation.util');
 const {
@@ -143,6 +146,24 @@ async function updatePassword(req, res, next) {
     if (result.error === 'USER_NOT_FOUND') {
       return res.status(404).json(buildMessageResponse('Usuario no encontrado'));
     }
+
+    if (req.tokenPayload?.jti && req.tokenPayload?.exp) {
+      await sessionModel.revokeToken({
+        jti: req.tokenPayload.jti,
+        userId: req.user.id,
+        expiresAt: new Date(req.tokenPayload.exp * 1000),
+      });
+    }
+
+    clearAuthCookie(res);
+    await registerAudit(req, {
+      action: 'password_changed',
+      entity: 'auth',
+      entityId: req.user.id,
+      details: {
+        email: req.user.email,
+      },
+    });
 
     return res.status(200).json(buildPasswordUpdatedResponse());
   } catch (error) {

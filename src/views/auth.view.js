@@ -27,9 +27,33 @@ function buildLogoutResponse() {
   };
 }
 
+function buildPasswordResetRequestedResponse() {
+  return {
+    ok: true,
+    message: 'Si el email existe, enviaremos instrucciones para restablecer el acceso.',
+  };
+}
+
+function buildPasswordResetTokenValidResponse() {
+  return {
+    ok: true,
+    message: 'Token valido',
+  };
+}
+
+function buildPasswordResetSuccessResponse() {
+  return {
+    ok: true,
+    message: 'Password actualizada correctamente. Inicia sesion nuevamente.',
+  };
+}
+
 module.exports = {
   buildMessageResponse,
   buildLoginSuccessResponse,
   buildCurrentUserResponse,
   buildLogoutResponse,
+  buildPasswordResetRequestedResponse,
+  buildPasswordResetSuccessResponse,
+  buildPasswordResetTokenValidResponse,
 };
