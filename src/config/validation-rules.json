@@ -1,0 +1,15 @@
+{
+  "auth": {
+    "passwordMinLength": 8,
+    "passwordRecommendedMinLength": 12
+  },
+  "pagination": {
+    "defaultPage": 1,
+    "defaultPageSize": 20,
+    "maxPageSize": 100
+  },
+  "ui": {
+    "defaultPageSize": 20,
+    "maxPageSize": 100
+  }
+}

@@ -1,4 +1,4 @@
-const validationRules = require('../../../shared/validation/rules.json');
+const validationRules = require('../config/validation-rules');
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;

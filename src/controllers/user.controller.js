@@ -1,5 +1,5 @@
 const userModel = require('../models/user.model');
-const validationRules = require('../../../shared/validation/rules.json');
+const validationRules = require('../config/validation-rules');
 const { hashPassword } = require('../utils/hash.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const { isNonEmptyString, isPositiveInteger, isValidEmail } = require('../utils/validation.util');
