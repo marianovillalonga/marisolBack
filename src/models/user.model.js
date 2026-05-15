@@ -640,6 +640,7 @@ class UserModel {
           u.email,
           u.activo,
           u.password_actualizada_en,
+          FLOOR(EXTRACT(EPOCH FROM u.password_actualizada_en) * 1000)::BIGINT AS password_actualizada_en_epoch_ms,
           r.nombre AS rol
         FROM usuarios u
         LEFT JOIN usuario_roles ur ON ur.usuario_id = u.id
@@ -661,6 +662,7 @@ class UserModel {
       email: user.email,
       role: user.rol || null,
       passwordUpdatedAt: user.password_actualizada_en,
+      passwordUpdatedAtEpochMs: Number(user.password_actualizada_en_epoch_ms || 0),
     };
   }
 

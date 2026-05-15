@@ -20,9 +20,7 @@ async function authMiddleware(req, res, next) {
     const payload = verifyAuthToken(token);
     const revoked = await sessionModel.isTokenRevoked(payload.jti);
     const currentUser = await userModel.findSessionUserById(Number(payload.sub));
-    const passwordUpdatedAt = currentUser?.passwordUpdatedAt
-      ? new Date(currentUser.passwordUpdatedAt).getTime()
-      : 0;
+    const passwordUpdatedAt = Number(currentUser?.passwordUpdatedAtEpochMs || 0);
     const tokenIssuedAt = Number(payload.iat || 0) * 1000;
     const tokenInvalidatedByPasswordChange =
       Boolean(passwordUpdatedAt) && tokenIssuedAt > 0 && tokenIssuedAt < passwordUpdatedAt;
