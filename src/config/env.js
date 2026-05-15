@@ -8,14 +8,11 @@ const FRONTEND_URLS = (process.env.FRONTEND_URLS || FRONTEND_URL)
   .split(',')
   .map((url) => url.trim())
   .filter(Boolean);
-const FRONTEND_RESET_PASSWORD_URL =
-  process.env.FRONTEND_RESET_PASSWORD_URL || `${FRONTEND_URL.replace(/\/$/, '')}/auth/reset-password`;
 const AUTH_SECRET = process.env.AUTH_SECRET || (isTest ? 'test-auth-secret-32-chars-minimum!!' : '');
 const AUTH_TOKEN_TTL = process.env.AUTH_TOKEN_TTL || '8h';
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'marisol_auth';
 const PASSWORD_RESET_TOKEN_TTL_MINUTES = Number(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES) || 30;
-const MAIL_DELIVERY_MODE =
-  process.env.MAIL_DELIVERY_MODE || (isProduction ? 'disabled' : 'file');
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const MAIL_FROM = process.env.MAIL_FROM || '';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -81,12 +78,12 @@ function validateRuntimeConfig() {
     issues.push('FRONTEND_URLS debe usar https en produccion');
   }
 
-  if (isProduction && !isHttpsUrl(FRONTEND_RESET_PASSWORD_URL)) {
-    issues.push('FRONTEND_RESET_PASSWORD_URL debe usar https en produccion');
-  }
-
   if (PASSWORD_RESET_TOKEN_TTL_MINUTES < 5 || PASSWORD_RESET_TOKEN_TTL_MINUTES > 120) {
     issues.push('PASSWORD_RESET_TOKEN_TTL_MINUTES debe estar entre 5 y 120');
+  }
+
+  if (RESEND_API_KEY && !MAIL_FROM.trim()) {
+    issues.push('MAIL_FROM es obligatorio cuando RESEND_API_KEY esta configurada');
   }
 
   if (!hasDatabaseUrl && !hasLocalDbConfig) {
@@ -104,12 +101,11 @@ module.exports = {
   PORT,
   FRONTEND_URL,
   FRONTEND_URLS,
-  FRONTEND_RESET_PASSWORD_URL,
   AUTH_SECRET,
   AUTH_TOKEN_TTL,
   AUTH_COOKIE_NAME,
   PASSWORD_RESET_TOKEN_TTL_MINUTES,
-  MAIL_DELIVERY_MODE,
+  RESEND_API_KEY,
   MAIL_FROM,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,

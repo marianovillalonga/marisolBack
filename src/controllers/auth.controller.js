@@ -5,11 +5,7 @@ const pool = require('../config/db');
 const { registerAudit } = require('../utils/audit.util');
 const { clearAuthCookie, setAuthCookie } = require('../utils/cookie.util');
 const { hashPassword } = require('../utils/hash.util');
-const {
-  MailDeliveryError,
-  isMailDeliveryAvailable,
-  sendPasswordResetEmail,
-} = require('../utils/mail.util');
+const { MailDeliveryError, sendPasswordResetEmail } = require('../utils/mail.util');
 const {
   buildPasswordResetUrl,
   generatePasswordResetToken,
@@ -124,20 +120,6 @@ async function requestPasswordReset(req, res, next) {
 
     if (!email || !isValidEmail(email)) {
       return res.status(400).json(buildMessageResponse('Ingresa un email valido'));
-    }
-
-    if (!isMailDeliveryAvailable()) {
-      await registerAudit(req, {
-        action: 'password_reset_unavailable',
-        entity: 'auth',
-        details: {
-          email: maskEmail(email),
-        },
-      });
-
-      return res
-        .status(503)
-        .json(buildMessageResponse('La recuperacion de password no esta disponible temporalmente.'));
     }
 
     const user = await userModel.findByEmail(email);

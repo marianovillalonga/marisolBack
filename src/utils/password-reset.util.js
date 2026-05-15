@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { FRONTEND_RESET_PASSWORD_URL, PASSWORD_RESET_TOKEN_TTL_MINUTES } = require('../config/env');
+const { FRONTEND_URL, PASSWORD_RESET_TOKEN_TTL_MINUTES } = require('../config/env');
 
 function generatePasswordResetToken() {
   return crypto.randomBytes(32).toString('hex');
@@ -14,7 +14,8 @@ function getPasswordResetExpirationDate() {
 }
 
 function buildPasswordResetUrl(token) {
-  const baseUrl = new URL(FRONTEND_RESET_PASSWORD_URL);
+  const baseUrl = new URL(FRONTEND_URL.replace(/\/$/, ''));
+  baseUrl.pathname = '/reset-password';
   baseUrl.searchParams.set('token', token);
   return baseUrl.toString();
 }
