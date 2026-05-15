@@ -1,4 +1,5 @@
 const app = require('./app');
+const pool = require('./config/db');
 const auditModel = require('./models/audit.model');
 const categoryModel = require('./models/category.model');
 const clientModel = require('./models/client.model');
@@ -13,6 +14,40 @@ const logger = require('./utils/logger.util');
 
 const STARTUP_DB_RETRIES = Number(process.env.DB_STARTUP_RETRIES) || 6;
 const STARTUP_DB_RETRY_DELAY_MS = Number(process.env.DB_STARTUP_RETRY_DELAY_MS) || 5000;
+
+function serializeError(error) {
+  if (!error) {
+    return {
+      message: 'Unknown startup error',
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message || 'Unknown error',
+      stack: error.stack || null,
+      code: error.code || null,
+      errno: error.errno || null,
+      syscall: error.syscall || null,
+      address: error.address || null,
+      port: error.port || null,
+      detail: error.detail || null,
+      hint: error.hint || null,
+      severity: error.severity || null,
+    };
+  }
+
+  if (typeof error === 'object') {
+    return {
+      message: JSON.stringify(error),
+    };
+  }
+
+  return {
+    message: String(error),
+  };
+}
 
 function isRetryableDatabaseStartupError(error) {
   if (!error) {
@@ -74,7 +109,8 @@ async function startServer() {
         attempt,
         maxAttempts: STARTUP_DB_RETRIES,
         retryDelayMs: STARTUP_DB_RETRY_DELAY_MS,
-        error: error instanceof Error ? error.message : String(error),
+        db: typeof pool.getConnectionDebugInfo === 'function' ? pool.getConnectionDebugInfo() : null,
+        error: serializeError(error),
       });
       await sleep(STARTUP_DB_RETRY_DELAY_MS);
     }
@@ -125,8 +161,8 @@ process.on('uncaughtException', (error) => {
 
 startServer().catch((error) => {
   logger.error('server_start_failed', {
-    error: error instanceof Error ? error.message : String(error),
-    stack: error instanceof Error ? error.stack : null,
+    db: typeof pool.getConnectionDebugInfo === 'function' ? pool.getConnectionDebugInfo() : null,
+    error: serializeError(error),
   });
   process.exit(1);
 });

@@ -16,6 +16,24 @@ const localConfig = {
   database: process.env.DB_NAME || 'postgres',
 };
 
+function redactConnectionString(connectionString) {
+  if (!connectionString) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(connectionString);
+
+    if (parsed.password) {
+      parsed.password = '***';
+    }
+
+    return parsed.toString();
+  } catch {
+    return '[invalid-database-url]';
+  }
+}
+
 function parseBoolean(value) {
   if (value === undefined) {
     return undefined;
@@ -77,5 +95,19 @@ const poolConfig = databaseUrl
     };
 
 const pool = new Pool(poolConfig);
+
+pool.getConnectionDebugInfo = () => ({
+  mode: databaseUrl ? 'database_url' : 'discrete_config',
+  connectionString: redactConnectionString(databaseUrl),
+  host: databaseUrl ? null : localConfig.host,
+  port: databaseUrl ? null : localConfig.port,
+  database: databaseUrl ? null : localConfig.database,
+  user: databaseUrl ? null : localConfig.user,
+  sslEnabled: Boolean(sslConfig),
+  sslRejectUnauthorized: sslConfig ? sslConfig.rejectUnauthorized !== false : null,
+  poolMax: maxConnections,
+  connectionTimeoutMillis,
+  idleTimeoutMillis,
+});
 
 module.exports = pool;

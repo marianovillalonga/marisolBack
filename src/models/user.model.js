@@ -3,6 +3,25 @@ const { hashPassword, isBcryptHash, verifyPassword } = require('../utils/hash.ut
 const { ADMIN_EMAIL, ADMIN_NAME, ADMIN_PASSWORD, SEED_DEFAULT_ADMIN } = require('../config/env');
 
 class UserModel {
+  constructor() {
+    this.schemaReadyPromise = null;
+  }
+
+  async ensureAuthSchemaReady() {
+    if (!this.schemaReadyPromise) {
+      this.schemaReadyPromise = (async () => {
+        await this.ensureAuthTables();
+        await this.ensureProfileFields();
+        await this.ensureBaseRoles();
+      })().catch((error) => {
+        this.schemaReadyPromise = null;
+        throw error;
+      });
+    }
+
+    return this.schemaReadyPromise;
+  }
+
   async ensureAuthTables() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS roles (
@@ -150,6 +169,8 @@ class UserModel {
   }
 
   async findByEmail(email) {
+    await this.ensureAuthSchemaReady();
+
     const query = `
       SELECT
         u.id,
@@ -175,6 +196,8 @@ class UserModel {
   }
 
   async findRoleByName(roleName) {
+    await this.ensureAuthSchemaReady();
+
     const { rows } = await pool.query(
       'SELECT id, nombre FROM roles WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
       [roleName],
@@ -184,6 +207,8 @@ class UserModel {
   }
 
   async findPublicById(id) {
+    await this.ensureAuthSchemaReady();
+
     const query = `
       SELECT
         u.id,
@@ -213,6 +238,8 @@ class UserModel {
   }
 
   async validateCredentials(email, password) {
+    await this.ensureAuthSchemaReady();
+
     const user = await this.findByEmail(email);
 
     if (!user || !user.activo) {
@@ -244,6 +271,8 @@ class UserModel {
     avatarUrl,
     paymentMethodSettings = {},
   }) {
+    await this.ensureAuthSchemaReady();
+
     const client = await pool.connect();
 
     try {
@@ -325,6 +354,8 @@ class UserModel {
   }
 
   async updateProfile({ userId, name, email, phone, address, avatarUrl, paymentMethodSettings = {} }) {
+    await this.ensureAuthSchemaReady();
+
     const normalizedEmail = email.trim().toLowerCase();
     const client = await pool.connect();
 
@@ -406,6 +437,8 @@ class UserModel {
   }
 
   async changePassword({ userId, currentPassword, newPasswordHash }) {
+    await this.ensureAuthSchemaReady();
+
     const user = await this.findByIdWithPassword(userId);
 
     if (!user || !user.activo) {
@@ -431,6 +464,8 @@ class UserModel {
   }
 
   async findByIdWithPassword(id) {
+    await this.ensureAuthSchemaReady();
+
     const { rows } = await pool.query(
       `
         SELECT id, password, activo
@@ -445,6 +480,8 @@ class UserModel {
   }
 
   async listUsers() {
+    await this.ensureAuthSchemaReady();
+
     const { rows } = await pool.query(`
       SELECT
         u.id,
@@ -466,6 +503,8 @@ class UserModel {
   }
 
   async updateUserByAdmin({ userId, name, email, phone, address, roleName, active }) {
+    await this.ensureAuthSchemaReady();
+
     const normalizedEmail = email.trim().toLowerCase();
     const client = await pool.connect();
 
@@ -552,6 +591,8 @@ class UserModel {
   }
 
   async setUserActiveStatus({ userId, active }) {
+    await this.ensureAuthSchemaReady();
+
     const { rows } = await pool.query(
       `
         UPDATE usuarios
