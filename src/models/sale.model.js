@@ -251,16 +251,27 @@ class SaleModel {
   async getSalesSummary(from, to) {
     const { rows } = await pool.query(
       `
+        WITH ventas_periodo AS (
+          SELECT id, estado, total, monto_pagado, deuda_pendiente
+          FROM ventas
+          WHERE fecha_venta >= $1::timestamp
+            AND fecha_venta < ($2::timestamp + INTERVAL '1 day')
+        ),
+        items_confirmados AS (
+          SELECT COALESCE(SUM(vd.cantidad), 0)::int AS productos_vendidos
+          FROM venta_detalles vd
+          INNER JOIN ventas_periodo vp ON vp.id = vd.venta_id
+          WHERE vp.estado = 'confirmada'
+        )
         SELECT
           COUNT(*) FILTER (WHERE estado = 'confirmada')::int AS total_ventas,
           COUNT(*) FILTER (WHERE estado = 'anulada')::int AS ventas_anuladas,
           COALESCE(SUM(total) FILTER (WHERE estado = 'confirmada'), 0)::numeric(12, 2) AS total_facturado,
           COALESCE(SUM(monto_pagado) FILTER (WHERE estado = 'confirmada'), 0)::numeric(12, 2) AS total_cobrado,
           COALESCE(SUM(deuda_pendiente) FILTER (WHERE estado = 'confirmada'), 0)::numeric(12, 2) AS total_pendiente,
-          COALESCE(AVG(total) FILTER (WHERE estado = 'confirmada'), 0)::numeric(12, 2) AS ticket_promedio
-        FROM ventas
-        WHERE fecha_venta >= $1::timestamp
-          AND fecha_venta < ($2::timestamp + INTERVAL '1 day')
+          COALESCE(AVG(total) FILTER (WHERE estado = 'confirmada'), 0)::numeric(12, 2) AS ticket_promedio,
+          (SELECT productos_vendidos FROM items_confirmados) AS productos_vendidos
+        FROM ventas_periodo
       `,
       [from, to],
     );
@@ -274,6 +285,7 @@ class SaleModel {
       totalCobrado: Number(rows[0]?.total_cobrado || 0),
       totalPendiente: Number(rows[0]?.total_pendiente || 0),
       ticketPromedio: Number(rows[0]?.ticket_promedio || 0),
+      productosVendidos: Number(rows[0]?.productos_vendidos || 0),
     };
   }
 
