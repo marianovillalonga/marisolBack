@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const dns = require('dns');
 const nodemailer = require('nodemailer');
 const { Resend } = require('resend');
 const {
@@ -81,6 +82,23 @@ function isMailDeliveryAvailable() {
   return Boolean(RESEND_API_KEY) || hasSmtpConfig() || !isProduction;
 }
 
+function buildSmtpLookup() {
+  return (hostname, options, callback) => {
+    const normalizedOptions =
+      typeof options === 'function'
+        ? { family: SMTP_FAMILY, all: false, verbatim: false }
+        : {
+            ...options,
+            family: SMTP_FAMILY,
+            all: false,
+            verbatim: false,
+          };
+
+    const resolvedCallback = typeof options === 'function' ? options : callback;
+    dns.lookup(hostname, normalizedOptions, resolvedCallback);
+  };
+}
+
 async function sendPasswordResetEmail({ to, resetUrl, expiresAt, requestId = null }) {
   const emailPayload = buildPasswordResetMail({ to, resetUrl, expiresAt });
 
@@ -96,6 +114,7 @@ async function sendPasswordResetEmail({ to, resetUrl, expiresAt, requestId = nul
         port: Number(SMTP_PORT),
         secure: SMTP_SECURE,
         family: SMTP_FAMILY,
+        lookup: buildSmtpLookup(),
         auth: {
           user: SMTP_USER,
           pass: SMTP_PASS,

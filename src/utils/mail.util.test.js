@@ -49,6 +49,7 @@ test('sendPasswordResetEmail usa SMTP con nodemailer cuando hay configuracion SM
           assert.equal(config.port, 587);
           assert.equal(config.secure, false);
           assert.equal(config.family, 4);
+          assert.equal(typeof config.lookup, 'function');
           assert.deepEqual(config.auth, {
             user: 'smtp-user',
             pass: 'smtp-pass',
