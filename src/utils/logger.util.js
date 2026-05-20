@@ -15,6 +15,19 @@ const LOG_LEVELS = {
 };
 const configuredLogLevel = String(process.env.LOG_LEVEL || 'info').toLowerCase();
 const activeLogLevel = LOG_LEVELS[configuredLogLevel] || LOG_LEVELS.info;
+const SENSITIVE_KEYS = new Set([
+  'password',
+  'passwordhash',
+  'token',
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'secret',
+  'apikey',
+  'api_key',
+  'reseturl',
+  'resettoken',
+]);
 
 function ensureLogsDirectory() {
   fs.mkdirSync(logsDirectory, { recursive: true });
@@ -41,8 +54,30 @@ function buildBaseLog(level, message, meta = {}) {
     timestamp: new Date().toISOString(),
     level,
     message,
-    ...meta,
+    ...sanitizeMeta(meta),
   };
+}
+
+function sanitizeMeta(meta) {
+  if (Array.isArray(meta)) {
+    return meta.map((item) => sanitizeMeta(item));
+  }
+
+  if (!meta || typeof meta !== 'object') {
+    return meta;
+  }
+
+  return Object.fromEntries(
+    Object.entries(meta).map(([key, value]) => {
+      const normalizedKey = String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      if (SENSITIVE_KEYS.has(normalizedKey)) {
+        return [key, '[REDACTED]'];
+      }
+
+      return [key, sanitizeMeta(value)];
+    }),
+  );
 }
 
 function shouldLog(level) {
@@ -133,5 +168,6 @@ module.exports = {
   debug,
   error,
   info,
+  sanitizeMeta,
   warn,
 };

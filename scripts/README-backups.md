@@ -24,3 +24,4 @@ powershell -ExecutionPolicy Bypass -File .\scripts\restore-postgres.ps1 -BackupF
 - Programar el backup diario en Task Scheduler.
 - Conservar varias copias fuera del servidor.
 - Probar restore al menos una vez por mes.
+- Registrar fecha del ultimo backup exitoso y fecha del ultimo restore validado.

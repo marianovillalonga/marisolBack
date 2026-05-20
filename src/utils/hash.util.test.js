@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { hashPassword, isBcryptHash, verifyPassword } = require('./hash.util');
+const { hashPassword, isBcryptHash, isLegacyPasswordHash, verifyPassword } = require('./hash.util');
 
 test('hashPassword genera un hash bcrypt', async () => {
   const hash = await hashPassword('secreto123');
@@ -17,7 +17,8 @@ test('verifyPassword valida hashes bcrypt', async () => {
   assert.equal(await verifyPassword('otro', hash), false);
 });
 
-test('verifyPassword mantiene compatibilidad con passwords antiguas en texto plano', async () => {
-  assert.equal(await verifyPassword('legacy', 'legacy'), true);
+test('verifyPassword rechaza passwords legacy que no usan bcrypt', async () => {
+  assert.equal(isLegacyPasswordHash('legacy'), true);
+  assert.equal(await verifyPassword('legacy', 'legacy'), false);
   assert.equal(await verifyPassword('otra', 'legacy'), false);
 });

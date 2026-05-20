@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { hashPassword, isBcryptHash, verifyPassword } = require('../utils/hash.util');
+const { hashPassword, isLegacyPasswordHash, verifyPassword } = require('../utils/hash.util');
 const { ADMIN_EMAIL, ADMIN_NAME, ADMIN_PASSWORD, SEED_DEFAULT_ADMIN } = require('../config/env');
 
 class UserModel {
@@ -248,19 +248,22 @@ class UserModel {
       return null;
     }
 
+    if (isLegacyPasswordHash(user.password)) {
+      return {
+        error: 'PASSWORD_RESET_REQUIRED',
+        user: this.mapPublicUser(user),
+      };
+    }
+
     const isValid = await verifyPassword(password, user.password);
 
     if (!isValid) {
       return null;
     }
 
-    if (!isBcryptHash(user.password)) {
-      const passwordHash = await hashPassword(password);
-
-      await pool.query('UPDATE usuarios SET password = $1 WHERE id = $2', [passwordHash, user.id]);
-    }
-
-    return this.mapPublicUser(user);
+    return {
+      user: this.mapPublicUser(user),
+    };
   }
 
   async createUser({

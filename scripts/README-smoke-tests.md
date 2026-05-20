@@ -24,10 +24,10 @@ Script: `npm run smoke`
 - pedido cliente con entrega y venta asociada
 
 ## Uso
-```bash
-SMOKE_BASE_URL=http://127.0.0.1:4000 \
-SMOKE_ADMIN_EMAIL=admin@tudominio.com \
-SMOKE_ADMIN_PASSWORD=tu-password \
+```powershell
+$env:SMOKE_BASE_URL='http://127.0.0.1:4000'
+$env:SMOKE_ADMIN_EMAIL='admin@tudominio.com'
+$env:SMOKE_ADMIN_PASSWORD='tu-password'
 npm run smoke
 ```
 
@@ -48,11 +48,11 @@ npm start
 ```
 
 4. Validar health:
-```bash
-curl http://127.0.0.1:4000/api/health
+```powershell
+Invoke-RestMethod http://127.0.0.1:4000/api/health
 ```
 
 5. Ejecutar smoke:
-```bash
+```powershell
 npm run smoke
 ```

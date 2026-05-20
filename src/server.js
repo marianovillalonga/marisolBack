@@ -1,15 +1,6 @@
 const app = require('./app');
 const pool = require('./config/db');
-const auditModel = require('./models/audit.model');
-const categoryModel = require('./models/category.model');
-const clientModel = require('./models/client.model');
-const budgetModel = require('./models/budget.model');
 const { PORT, validateRuntimeConfig } = require('./config/env');
-const orderModel = require('./models/order.model');
-const productModel = require('./models/product.model');
-const saleModel = require('./models/sale.model');
-const sessionModel = require('./models/session.model');
-const userModel = require('./models/user.model');
 const logger = require('./utils/logger.util');
 
 const STARTUP_DB_RETRIES = Number(process.env.DB_STARTUP_RETRIES) || 6;
@@ -75,20 +66,8 @@ function sleep(ms) {
   });
 }
 
-async function initializeDatabase() {
-  await userModel.ensureAuthTables();
-  await userModel.ensureProfileFields();
-  await userModel.ensureBaseRoles();
-  await userModel.ensureAdminUser();
-  await sessionModel.ensureRevokedTokensTable();
-  await productModel.ensureProductsTable();
-  await categoryModel.ensureCategoriesTable();
-  await clientModel.ensureClientsTables();
-  await saleModel.ensureSalesTables();
-  await orderModel.ensureOrdersTables();
-  await budgetModel.ensureBudgetsTables();
-  await auditModel.ensureAuditTable();
-  await saleModel.repairClientPurchasesFromSales();
+async function verifyDatabaseConnection() {
+  await pool.query('SELECT 1');
 }
 
 async function startServer() {
@@ -96,7 +75,7 @@ async function startServer() {
 
   for (let attempt = 1; attempt <= STARTUP_DB_RETRIES; attempt += 1) {
     try {
-      await initializeDatabase();
+      await verifyDatabaseConnection();
       break;
     } catch (error) {
       const canRetry = isRetryableDatabaseStartupError(error) && attempt < STARTUP_DB_RETRIES;

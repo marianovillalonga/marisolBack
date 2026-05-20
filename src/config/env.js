@@ -78,12 +78,24 @@ function validateRuntimeConfig() {
     issues.push('FRONTEND_URLS debe usar https en produccion');
   }
 
+  if (!FRONTEND_URLS.length) {
+    issues.push('FRONTEND_URLS debe tener al menos un origen permitido');
+  }
+
   if (PASSWORD_RESET_TOKEN_TTL_MINUTES < 5 || PASSWORD_RESET_TOKEN_TTL_MINUTES > 120) {
     issues.push('PASSWORD_RESET_TOKEN_TTL_MINUTES debe estar entre 5 y 120');
   }
 
   if (RESEND_API_KEY && !MAIL_FROM.trim()) {
     issues.push('MAIL_FROM es obligatorio cuando RESEND_API_KEY esta configurada');
+  }
+
+  if (isProduction && !RESEND_API_KEY.trim()) {
+    issues.push('RESEND_API_KEY es obligatorio en produccion para recuperar passwords');
+  }
+
+  if (isProduction && !MAIL_FROM.trim()) {
+    issues.push('MAIL_FROM es obligatorio en produccion para recuperar passwords');
   }
 
   if (!hasDatabaseUrl && !hasLocalDbConfig) {

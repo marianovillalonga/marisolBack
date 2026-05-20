@@ -1,0 +1,9 @@
+{
+  "to": "test@example.com",
+  "from": "Sistema <no-reply@marisol.local>",
+  "subject": "Restablecer contrasena",
+  "text": "Recibimos una solicitud para restablecer tu contrasena.\n\nAbre este enlace para continuar:\nhttps://app.example.com/reset-password?token=abc\n\nEl enlace vence el 20 may 2026, 9:00 a. m..\nSi no solicitaste este cambio, ignora este correo.",
+  "html": "\n      <div style=\"font-family:Arial,sans-serif;color:#111827;line-height:1.5\">\n        <h2 style=\"margin:0 0 16px\">Restablecer contrasena</h2>\n        <p>Recibimos una solicitud para restablecer tu contrasena.</p>\n        <p style=\"margin:24px 0\">\n          <a\n            href=\"https://app.example.com/reset-password?token=abc\"\n            style=\"display:inline-block;padding:12px 18px;background:#111827;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600\"\n          >\n            Cambiar contrasena\n          </a>\n        </p>\n        <p>Si el boton no funciona, copia y pega este enlace en tu navegador:</p>\n        <p><a href=\"https://app.example.com/reset-password?token=abc\">https://app.example.com/reset-password?token=abc</a></p>\n        <p>El enlace vence el 20 may 2026, 9:00 a. m..</p>\n        <p>Si no solicitaste este cambio, ignora este correo.</p>\n      </div>\n    ",
+  "resetUrl": "https://app.example.com/reset-password?token=abc",
+  "expiresAt": "2026-05-20T12:00:00.000Z"
+}

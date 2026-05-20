@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
+    "bootstrap:schema": "node scripts/bootstrap-schema.js",
     "migrate": "node scripts/migrate.js",
+    "passwords:audit": "node scripts/find-legacy-password-users.js",
     "passwords:migrate": "node scripts/migrate-passwords.js",
     "test": "node --test \"src/**/*.test.js\"",
     "smoke": "node scripts/smoke-test.js"

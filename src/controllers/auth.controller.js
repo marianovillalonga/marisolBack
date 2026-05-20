@@ -38,11 +38,30 @@ async function login(req, res, next) {
       return res.status(400).json(buildMessageResponse('El email no es valido'));
     }
 
-    const user = await userModel.validateCredentials(email, password);
+    const authResult = await userModel.validateCredentials(email, password);
 
-    if (!user) {
+    if (!authResult) {
       return res.status(401).json(buildMessageResponse('Credenciales invalidas'));
     }
+
+    if (authResult.error === 'PASSWORD_RESET_REQUIRED') {
+      await registerAudit(req, {
+        action: 'legacy_password_login_blocked',
+        entity: 'auth',
+        entityId: authResult.user?.id || null,
+        details: {
+          email,
+        },
+      });
+
+      return res.status(403).json(
+        buildMessageResponse(
+          'Tu cuenta requiere restablecer la password antes de iniciar sesion. Usa "Olvide mi password".',
+        ),
+      );
+    }
+
+    const user = authResult.user;
 
     const token = createAuthToken({
       sub: user.id,

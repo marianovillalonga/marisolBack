@@ -3,6 +3,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const pool = require('../src/config/db');
+const { bootstrapSchema } = require('./bootstrap-schema');
 
 const migrationsDirectory = path.resolve(__dirname, '../migrations');
 
@@ -55,6 +56,9 @@ async function run() {
       await applyMigration(client, migrationFile, sql);
       console.log(`Applied migration: ${migrationFile}`);
     }
+
+    await bootstrapSchema();
+    console.log('Schema bootstrap completed');
   } finally {
     client.release();
     await pool.end();

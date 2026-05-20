@@ -40,6 +40,8 @@ test('validateRuntimeConfig permite configuracion segura en produccion', () => {
   process.env.DATABASE_URL = 'postgres://user:password@db.example.com:5432/marisol';
   process.env.DB_SSL = 'true';
   process.env.FRONTEND_URLS = 'https://marisol-front.vercel.app,https://app.marisol.com';
+  process.env.RESEND_API_KEY = 're_test_key';
+  process.env.MAIL_FROM = 'Sistema <no-reply@example.com>';
   delete process.env.DB_SSL_REJECT_UNAUTHORIZED;
 
   const { validateRuntimeConfig } = loadEnvModule();
@@ -62,5 +64,49 @@ test('validateRuntimeConfig falla si FRONTEND_URLS no usa https en produccion', 
   const { validateRuntimeConfig } = loadEnvModule();
 
   assert.throws(() => validateRuntimeConfig(), /FRONTEND_URLS debe usar https en produccion/);
+  restoreEnv(snapshot);
+});
+
+test('validateRuntimeConfig falla en produccion si falta RESEND_API_KEY', () => {
+  const snapshot = { ...process.env };
+
+  process.env.NODE_ENV = 'production';
+  process.env.AUTH_SECRET = '12345678901234567890123456789012';
+  process.env.ADMIN_PASSWORD = 'un-password-seguro';
+  process.env.DATABASE_URL = 'postgres://user:password@db.example.com:5432/marisol';
+  process.env.DB_SSL = 'true';
+  process.env.FRONTEND_URLS = 'https://app.marisol.com';
+  process.env.RESEND_API_KEY = '';
+  process.env.MAIL_FROM = '';
+  delete process.env.DB_SSL_REJECT_UNAUTHORIZED;
+
+  const { validateRuntimeConfig } = loadEnvModule();
+
+  assert.throws(
+    () => validateRuntimeConfig(),
+    /RESEND_API_KEY es obligatorio en produccion para recuperar passwords/,
+  );
+  restoreEnv(snapshot);
+});
+
+test('validateRuntimeConfig falla en produccion si falta MAIL_FROM', () => {
+  const snapshot = { ...process.env };
+
+  process.env.NODE_ENV = 'production';
+  process.env.AUTH_SECRET = '12345678901234567890123456789012';
+  process.env.ADMIN_PASSWORD = 'un-password-seguro';
+  process.env.DATABASE_URL = 'postgres://user:password@db.example.com:5432/marisol';
+  process.env.DB_SSL = 'true';
+  process.env.FRONTEND_URLS = 'https://app.marisol.com';
+  process.env.RESEND_API_KEY = 're_test_key';
+  process.env.MAIL_FROM = '';
+  delete process.env.DB_SSL_REJECT_UNAUTHORIZED;
+
+  const { validateRuntimeConfig } = loadEnvModule();
+
+  assert.throws(
+    () => validateRuntimeConfig(),
+    /MAIL_FROM es obligatorio en produccion para recuperar passwords/,
+  );
   restoreEnv(snapshot);
 });
