@@ -745,3 +745,10 @@
 {"timestamp":"2026-05-20T22:45:09.967Z","level":"info","message":"password_reset_email_sent","requestId":"test-request","provider":"smtp","messageId":"smtp-message-id"}
 {"timestamp":"2026-05-20T22:45:09.999Z","level":"info","message":"password_reset_email_preview_saved","requestId":"test-request","provider":"file","previewFileName":"1779317109999-4c0c3699-a64d-4749-b5f2-85286ed77a71.json"}
 {"timestamp":"2026-05-20T22:45:10.750Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-20T22:49:17.431Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-20T22:49:30.448Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-20T22:49:33.564Z","level":"info","message":"password_reset_email_delivery_started","requestId":"test-request","provider":"smtp"}
+{"timestamp":"2026-05-20T22:49:33.566Z","level":"info","message":"password_reset_email_sent","requestId":"test-request","provider":"smtp","messageId":"smtp-message-id"}
+{"timestamp":"2026-05-20T22:49:33.570Z","level":"info","message":"password_reset_email_sent","requestId":"test-request","provider":"resend","emailId":"re_email_id"}
+{"timestamp":"2026-05-20T22:49:33.600Z","level":"info","message":"password_reset_email_preview_saved","requestId":"test-request","provider":"file","previewFileName":"1779317373600-2cd04605-602a-4f06-bf22-72ac902f1a45.json"}
+{"timestamp":"2026-05-20T22:49:34.350Z","level":"info","message":"server_started","port":4000}

@@ -89,6 +89,75 @@ test('sendPasswordResetEmail usa SMTP con nodemailer cuando hay configuracion SM
   restoreEnv(snapshot);
 });
 
+test('sendPasswordResetEmail prioriza Resend sobre SMTP si ambos estan configurados', async () => {
+  const snapshot = { ...process.env };
+  let smtpUsed = false;
+
+  process.env.NODE_ENV = 'production';
+  process.env.RESEND_API_KEY = 're_test_key';
+  process.env.MAIL_FROM = 'Sistema <no-reply@example.com>';
+  process.env.SMTP_HOST = 'smtp.example.com';
+  process.env.SMTP_PORT = '587';
+  process.env.SMTP_SECURE = 'false';
+  process.env.SMTP_FAMILY = '4';
+  process.env.SMTP_USER = 'smtp-user';
+  process.env.SMTP_PASS = 'smtp-pass';
+
+  Module._load = function mockModuleLoader(request, parent, isMain) {
+    if (request === 'nodemailer') {
+      return {
+        createTransport() {
+          smtpUsed = true;
+          return {
+            async sendMail() {
+              return { messageId: 'smtp-message-id' };
+            },
+          };
+        },
+      };
+    }
+
+    if (request === 'resend') {
+      return {
+        Resend: class MockResend {
+          constructor(apiKey) {
+            assert.equal(apiKey, 're_test_key');
+          }
+
+          get emails() {
+            return {
+              send: async (payload) => {
+                assert.equal(payload.to, 'test@example.com');
+                return {
+                  data: {
+                    id: 're_email_id',
+                  },
+                };
+              },
+            };
+          }
+        },
+      };
+    }
+
+    return originalLoad(request, parent, isMain);
+  };
+
+  const { sendPasswordResetEmail } = loadMailModule();
+  const result = await sendPasswordResetEmail({
+    to: 'test@example.com',
+    resetUrl: 'https://app.example.com/reset-password?token=abc',
+    expiresAt: new Date('2026-05-20T12:00:00.000Z'),
+    requestId: 'test-request',
+  });
+
+  assert.equal(result.deliveryMode, 'resend');
+  assert.equal(result.emailId, 're_email_id');
+  assert.equal(smtpUsed, false);
+
+  restoreEnv(snapshot);
+});
+
 test('sendPasswordResetEmail falla en produccion si no hay proveedor configurado', async () => {
   const snapshot = { ...process.env };
 

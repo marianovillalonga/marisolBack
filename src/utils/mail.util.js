@@ -102,6 +102,29 @@ function buildSmtpLookup() {
 async function sendPasswordResetEmail({ to, resetUrl, expiresAt, requestId = null }) {
   const emailPayload = buildPasswordResetMail({ to, resetUrl, expiresAt });
 
+  if (RESEND_API_KEY) {
+    try {
+      const resend = new Resend(RESEND_API_KEY);
+      const result = await resend.emails.send(emailPayload);
+
+      logger.info('password_reset_email_sent', {
+        requestId,
+        provider: 'resend',
+        emailId: result.data?.id || null,
+      });
+
+      return {
+        deliveryMode: 'resend',
+        emailId: result.data?.id || null,
+      };
+    } catch (error) {
+      throw new MailDeliveryError(
+        'MAIL_DELIVERY_FAILED',
+        error instanceof Error ? error.message : 'No se pudo enviar el email de recuperacion.',
+      );
+    }
+  }
+
   if (hasSmtpConfig()) {
     try {
       logger.info('password_reset_email_delivery_started', {
@@ -146,29 +169,6 @@ async function sendPasswordResetEmail({ to, resetUrl, expiresAt, requestId = nul
       throw new MailDeliveryError(
         'MAIL_DELIVERY_FAILED',
         error instanceof Error ? error.message : 'No se pudo enviar el email de recuperacion por SMTP.',
-      );
-    }
-  }
-
-  if (RESEND_API_KEY) {
-    try {
-      const resend = new Resend(RESEND_API_KEY);
-      const result = await resend.emails.send(emailPayload);
-
-      logger.info('password_reset_email_sent', {
-        requestId,
-        provider: 'resend',
-        emailId: result.data?.id || null,
-      });
-
-      return {
-        deliveryMode: 'resend',
-        emailId: result.data?.id || null,
-      };
-    } catch (error) {
-      throw new MailDeliveryError(
-        'MAIL_DELIVERY_FAILED',
-        error instanceof Error ? error.message : 'No se pudo enviar el email de recuperacion.',
       );
     }
   }
