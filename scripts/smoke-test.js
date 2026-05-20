@@ -1,10 +1,18 @@
 require('dotenv').config();
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const baseUrl = String(process.env.SMOKE_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
 const adminEmail = process.env.SMOKE_ADMIN_EMAIL || process.env.ADMIN_EMAIL;
 const adminPassword = process.env.SMOKE_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
+const smokeOrigin = String(
+  process.env.SMOKE_ORIGIN || process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://127.0.0.1:3000',
+)
+  .split(',')[0]
+  .trim();
+const mailPreviewDirectory = path.resolve(__dirname, '../tmp/mail');
 
 function buildUrl(pathname) {
   return `${baseUrl}${pathname}`;
@@ -24,9 +32,21 @@ function createRunId() {
   return crypto.randomUUID().slice(0, 8);
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 class SmokeApiClient {
   constructor() {
     this.cookieJar = new Map();
+  }
+
+  cloneWithCookies() {
+    const nextClient = new SmokeApiClient();
+    nextClient.cookieJar = new Map(this.cookieJar);
+    return nextClient;
   }
 
   applySetCookie(response) {
@@ -64,6 +84,7 @@ class SmokeApiClient {
   async request(pathname, { method = 'GET', body, expectedStatus, headers = {} } = {}) {
     const finalHeaders = {
       Accept: 'application/json',
+      Connection: 'close',
       'X-Request-Id': `smoke-${createRunId()}`,
       ...headers,
     };
@@ -76,13 +97,30 @@ class SmokeApiClient {
 
     if (cookieHeader) {
       finalHeaders.Cookie = cookieHeader;
+
+      if (!finalHeaders.Origin) {
+        finalHeaders.Origin = smokeOrigin;
+      }
     }
 
-    const response = await fetch(buildUrl(pathname), {
-      method,
-      headers: finalHeaders,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let response;
+
+    try {
+      response = await fetch(buildUrl(pathname), {
+        method,
+        headers: finalHeaders,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (error) {
+      await sleep(500);
+      response = await fetch(buildUrl(pathname), {
+        method,
+        headers: finalHeaders,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }).catch(() => {
+        throw error;
+      });
+    }
 
     this.applySetCookie(response);
 
@@ -106,12 +144,47 @@ class SmokeApiClient {
   }
 }
 
+function getPreviewResetToken(email, requestedAtMs) {
+  if (!fs.existsSync(mailPreviewDirectory)) {
+    throw new Error('No existe el directorio de previews de email para recuperar el token de reset.');
+  }
+
+  const candidateFiles = fs
+    .readdirSync(mailPreviewDirectory)
+    .map((fileName) => ({
+      fileName,
+      filePath: path.join(mailPreviewDirectory, fileName),
+      stats: fs.statSync(path.join(mailPreviewDirectory, fileName)),
+    }))
+    .filter(({ stats, fileName }) => stats.isFile() && fileName.endsWith('.json'))
+    .filter(({ stats }) => stats.mtimeMs >= requestedAtMs)
+    .sort((left, right) => right.stats.mtimeMs - left.stats.mtimeMs);
+
+  for (const candidate of candidateFiles) {
+    const payload = JSON.parse(fs.readFileSync(candidate.filePath, 'utf8'));
+
+    if (String(payload.to || '').trim().toLowerCase() !== String(email || '').trim().toLowerCase()) {
+      continue;
+    }
+
+    const resetUrl = new URL(payload.resetUrl);
+    const token = resetUrl.searchParams.get('token');
+
+    if (token) {
+      return token;
+    }
+  }
+
+  throw new Error(`No se encontro un preview de reset util para ${email}`);
+}
+
 async function main() {
   if (!adminEmail || !adminPassword) {
     throw new Error('Faltan SMOKE_ADMIN_EMAIL y/o SMOKE_ADMIN_PASSWORD para ejecutar los smoke tests.');
   }
 
   const api = new SmokeApiClient();
+  const publicApi = new SmokeApiClient();
   const runId = createRunId();
   const today = new Date().toISOString().slice(0, 10);
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -124,6 +197,17 @@ async function main() {
   console.log(`[smoke] Health check en ${baseUrl}`);
   const health = await api.request('/api/health', { expectedStatus: 200 });
   assert(health.body?.ok === true, 'El health check no devolvio ok=true');
+
+  console.log('[smoke] Login invalido');
+  const invalidLogin = await publicApi.request('/api/auth/login', {
+    method: 'POST',
+    expectedStatus: 401,
+    body: {
+      email: adminEmail,
+      password: `${adminPassword}-incorrecta`,
+    },
+  });
+  assert(invalidLogin.body?.ok === false, 'El login invalido no devolvio ok=false');
 
   console.log('[smoke] Login admin');
   const login = await api.request('/api/auth/login', {
@@ -154,6 +238,26 @@ async function main() {
   });
   const workerId = createdUser.body?.user?.id;
   assert(workerId, 'No se pudo crear el usuario vendedor de smoke');
+
+  const workerApi = new SmokeApiClient();
+  console.log('[smoke] Login vendedor');
+  const workerLogin = await workerApi.request('/api/auth/login', {
+    method: 'POST',
+    expectedStatus: 200,
+    body: {
+      email: workerEmail,
+      password: workerPassword,
+    },
+  });
+  assert(workerLogin.body?.user?.role === 'vendedor', 'El usuario smoke no inicio sesion como vendedor');
+
+  console.log('[smoke] Permisos por rol');
+  const forbiddenUsersList = await workerApi.request('/api/users', {
+  });
+  assert(
+    forbiddenUsersList.status === 401 || forbiddenUsersList.status === 403,
+    'El vendedor no deberia acceder a administracion de usuarios',
+  );
 
   const users = await api.request('/api/users', { expectedStatus: 200 });
   assert(
@@ -265,6 +369,21 @@ async function main() {
   const saleId = sale.body?.sale?.id;
   assert(saleId, 'No se pudo crear la venta');
 
+  const duplicateSaleAttempt = await api.request('/api/sales', {
+    method: 'POST',
+    expectedStatus: 400,
+    body: {
+      clientId,
+      descuento: 0,
+      montoPagado: 3000,
+      notas: 'Venta duplicada de smoke test',
+      fechaVenta: today,
+      pagos: [{ metodo: 'efectivo', monto: 3000 }],
+      items: [],
+    },
+  });
+  assert(duplicateSaleAttempt.body?.ok === false, 'La doble carga basica de venta invalida deberia fallar');
+
   const listedSales = await api.request('/api/sales?page=1&pageSize=5&search=Venta', {
     expectedStatus: 200,
   });
@@ -334,6 +453,149 @@ async function main() {
   assert(
     productAfterCustomerDelivery.body?.product?.cantidad === 5,
     'El stock no desconto correctamente despues de entregar el pedido de cliente',
+  );
+
+  console.log('[smoke] Doble confirmacion de pedido entregado');
+  const duplicateDelivery = await api.request(`/api/orders/${customerOrderId}/customer`, {
+    method: 'PATCH',
+    body: {
+      estado: 'entregado',
+      montoEntregado: 1500,
+      metodoPago: 'efectivo',
+    },
+  });
+  assert(
+    duplicateDelivery.status >= 400,
+    'El pedido entregado no deberia permitir una segunda confirmacion exitosa',
+  );
+
+  const stockAfterDuplicateDelivery = await api.request(`/api/products/${productId}`, { expectedStatus: 200 });
+  assert(
+    stockAfterDuplicateDelivery.body?.product?.cantidad === 5,
+    'La doble confirmacion modifico el stock cuando no debia',
+  );
+
+  console.log('[smoke] Recuperacion de password end-to-end');
+  const passwordResetRequestedAt = Date.now();
+  const forgotPassword = await publicApi.request('/api/auth/forgot-password', {
+    method: 'POST',
+    expectedStatus: 202,
+    body: {
+      email: workerEmail,
+    },
+  });
+  assert(forgotPassword.body?.ok === true, 'La solicitud de reset no devolvio respuesta aceptada');
+
+  const resetToken = getPreviewResetToken(workerEmail, passwordResetRequestedAt);
+  const resetPassword = `ResetPass-${runId}!2026`;
+  console.log('[smoke] Reset password con token de preview');
+  const resetPasswordResponse = await publicApi.request('/api/auth/password-reset', {
+    method: 'POST',
+    expectedStatus: 200,
+    body: {
+      token: resetToken,
+      newPassword: resetPassword,
+      confirmPassword: resetPassword,
+    },
+  });
+  assert(resetPasswordResponse.body?.ok === true, 'No se pudo completar el reset de password');
+
+  console.log('[smoke] Reutilizacion de token de reset');
+  const reusedResetToken = await publicApi.request('/api/auth/password-reset', {
+    method: 'POST',
+    expectedStatus: 400,
+    body: {
+      token: resetToken,
+      newPassword: `${resetPassword}-x`,
+      confirmPassword: `${resetPassword}-x`,
+    },
+  });
+  assert(reusedResetToken.body?.ok === false, 'El token de reset reutilizado deberia fallar');
+
+  console.log('[smoke] Login con password anterior del vendedor');
+  const workerOldPasswordLogin = await workerApi.request('/api/auth/login', {
+    method: 'POST',
+    expectedStatus: 401,
+    body: {
+      email: workerEmail,
+      password: workerPassword,
+    },
+  });
+  assert(workerOldPasswordLogin.body?.ok === false, 'La password anterior no deberia seguir siendo valida');
+
+  console.log('[smoke] Login con password nueva del vendedor');
+  const workerNewPasswordLogin = await workerApi.request('/api/auth/login', {
+    method: 'POST',
+    expectedStatus: 200,
+    body: {
+      email: workerEmail,
+      password: resetPassword,
+    },
+  });
+  assert(workerNewPasswordLogin.body?.ok === true, 'La nueva password no permitio iniciar sesion');
+
+  console.log('[smoke] Concurrencia de stock con ventas simultaneas');
+  const createdRaceProduct = await api.request('/api/products', {
+    method: 'POST',
+    expectedStatus: 201,
+    body: {
+      nombre: `Producto Carrera ${runId}`,
+      categoria: 'Smoke QA',
+      subcategoria: 'Concurrency',
+      codigoBarras: createEanSeed(),
+      cantidad: 1,
+      stockMinimo: 0,
+      precio: 500,
+      detalle: 'Producto para prueba de concurrencia',
+      imageUrl: '',
+    },
+  });
+  const raceProductId = createdRaceProduct.body?.product?.id;
+  assert(raceProductId, 'No se pudo crear el producto para concurrencia');
+
+  const concurrentClientA = api.cloneWithCookies();
+  const concurrentClientB = api.cloneWithCookies();
+  const concurrentPayload = {
+    clientId,
+    descuento: 0,
+    montoPagado: 500,
+    notas: 'Venta concurrente smoke test',
+    fechaVenta: today,
+    pagos: [{ metodo: 'efectivo', monto: 500 }],
+    items: [
+      {
+        productoId: raceProductId,
+        productoNombre: `Producto Carrera ${runId}`,
+        cantidad: 1,
+        precioUnitario: 500,
+      },
+    ],
+  };
+
+  const [concurrentSaleA, concurrentSaleB] = await Promise.all([
+    concurrentClientA.request('/api/sales', {
+      method: 'POST',
+      body: concurrentPayload,
+    }),
+    concurrentClientB.request('/api/sales', {
+      method: 'POST',
+      body: concurrentPayload,
+    }),
+  ]);
+
+  const successfulConcurrentSales = [concurrentSaleA, concurrentSaleB].filter(
+    (response) => response.status === 201,
+  );
+  const failedConcurrentSales = [concurrentSaleA, concurrentSaleB].filter(
+    (response) => response.status >= 400,
+  );
+  assert(successfulConcurrentSales.length === 1, 'La concurrencia permitio mas de una venta sobre stock 1');
+  assert(failedConcurrentSales.length === 1, 'La concurrencia no rechazo la segunda venta sobre stock insuficiente');
+
+  const raceProductAfterSales = await api.request(`/api/products/${raceProductId}`, { expectedStatus: 200 });
+  assert(
+    raceProductAfterSales.body?.product?.cantidad === 0,
+    'La concurrencia dejo stock inconsistente en el producto de prueba',
   );
 
   console.log('[smoke] Logout');

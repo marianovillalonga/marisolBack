@@ -21,3 +21,11 @@
 ## Rollback
 - Si falla `health`, `login`, `auth/me`, `sales`, `orders` o `stock`, volver a la release anterior
 - Repetir smoke despues del rollback
+
+## Alertas minimas esperadas
+- Backend sin respuesta
+- `GET /api/health` con `503`
+- Base de datos inaccesible
+- Pico anormal de `request_failed`
+- Disco lleno
+- Backup ausente o backup fallido

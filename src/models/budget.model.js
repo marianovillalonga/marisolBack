@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { addDaysToDateOnly } = require('../utils/date.util');
 
 class BudgetModel {
   mapBudget(row) {
@@ -672,9 +673,7 @@ class BudgetModel {
 }
 
 function addDaysToDate(dateString, days) {
-  const baseDate = new Date(`${dateString}T00:00:00`);
-  baseDate.setDate(baseDate.getDate() + Number(days));
-  return baseDate.toISOString();
+  return `${addDaysToDateOnly(dateString, days)}T00:00:00.000Z`;
 }
 
 module.exports = new BudgetModel();

@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const saleModel = require('./sale.model');
+const { getDateOnlyString } = require('../utils/date.util');
 
 function roundToTwo(value) {
   return Number(Number(value || 0).toFixed(2));
@@ -921,6 +922,11 @@ class OrderModel {
         return { error: 'BALANCE_PENDING', saldoPendiente };
       }
 
+      if (order.estado === 'entregado' && nextEstado === 'entregado') {
+        await dbClient.query('ROLLBACK');
+        return { error: 'ALREADY_DELIVERED' };
+      }
+
       let ventaId = order.venta_id;
 
       if (nextEstado === 'entregado' && !ventaId) {
@@ -948,7 +954,7 @@ class OrderModel {
           montoPagado: montoTotal,
           pagos: [{ metodo: metodoPago, monto: montoTotal }],
           notas: `Entrega de pedido de cliente #${orderId} - ${order.agasajado_nombre || order.cliente_nombre || ''}`.trim(),
-          fechaVenta: new Date(order.fecha_entrega || new Date()).toISOString().slice(0, 10),
+          fechaVenta: getDateOnlyString(order.fecha_entrega || new Date()),
           items,
         });
 

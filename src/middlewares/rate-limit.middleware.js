@@ -1,5 +1,12 @@
 const { buildMessageResponse } = require('../views/auth.view');
 
+function resolveResetAttemptIdentifier(req) {
+  return String(req.body?.token || req.params?.token || '')
+    .trim()
+    .toLowerCase()
+    .slice(0, 24);
+}
+
 function createRateLimitMiddleware({
   windowMs,
   maxRequests,
@@ -52,7 +59,8 @@ const passwordResetRequestRateLimit = createRateLimitMiddleware({
 const passwordResetAttemptRateLimit = createRateLimitMiddleware({
   windowMs: 15 * 60 * 1000,
   maxRequests: 10,
-  keyBuilder: (req) => `password-reset-attempt:${req.ip || 'unknown'}`,
+  keyBuilder: (req) =>
+    `password-reset-attempt:${req.ip || 'unknown'}:${resolveResetAttemptIdentifier(req) || 'anonymous'}`,
   message: 'Demasiados intentos de restablecimiento. Espera unos minutos antes de reintentar.',
 });
 
@@ -67,4 +75,5 @@ module.exports = {
   loginRateLimit,
   passwordResetAttemptRateLimit,
   passwordResetRequestRateLimit,
+  resolveResetAttemptIdentifier,
 };

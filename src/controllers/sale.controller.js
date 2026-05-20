@@ -1,6 +1,7 @@
 const saleModel = require('../models/sale.model');
 const { registerAudit } = require('../utils/audit.util');
 const { validateSaleInput } = require('../utils/document-validation.util');
+const { getDateOnlyString } = require('../utils/date.util');
 const { parsePaginationParams } = require('../utils/validation.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const {
@@ -28,7 +29,7 @@ async function listSales(req, res, next) {
 
 async function getSalesSummary(req, res, next) {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getDateOnlyString();
     const from = req.query.from || today;
     const to = req.query.to || from;
 

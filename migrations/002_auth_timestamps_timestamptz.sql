@@ -1,0 +1,17 @@
+ALTER TABLE IF EXISTS usuarios
+  ALTER COLUMN password_actualizada_en TYPE TIMESTAMPTZ
+  USING password_actualizada_en AT TIME ZONE 'UTC';
+
+ALTER TABLE IF EXISTS password_reset_tokens
+  ALTER COLUMN expira_en TYPE TIMESTAMPTZ
+  USING expira_en AT TIME ZONE 'UTC',
+  ALTER COLUMN usado_en TYPE TIMESTAMPTZ
+  USING CASE WHEN usado_en IS NULL THEN NULL ELSE usado_en AT TIME ZONE 'UTC' END,
+  ALTER COLUMN fecha_creacion TYPE TIMESTAMPTZ
+  USING fecha_creacion AT TIME ZONE 'UTC';
+
+ALTER TABLE IF EXISTS tokens_revocados
+  ALTER COLUMN expira_en TYPE TIMESTAMPTZ
+  USING expira_en AT TIME ZONE 'UTC',
+  ALTER COLUMN fecha_revocacion TYPE TIMESTAMPTZ
+  USING fecha_revocacion AT TIME ZONE 'UTC';

@@ -2,6 +2,7 @@ const userModel = require('../models/user.model');
 const sessionModel = require('../models/session.model');
 const validationRules = require('../config/validation-rules');
 const { hashPassword } = require('../utils/hash.util');
+const { normalizeImageUrl } = require('../utils/image.util');
 const { clearAuthCookie } = require('../utils/cookie.util');
 const { registerAudit } = require('../utils/audit.util');
 const { buildMessageResponse } = require('../views/auth.view');
@@ -48,6 +49,12 @@ async function createUser(req, res, next) {
         );
     }
 
+    const normalizedAvatar = await normalizeImageUrl(String(avatarUrl || '').trim());
+
+    if (normalizedAvatar.error) {
+      return res.status(400).json(buildMessageResponse(normalizedAvatar.error));
+    }
+
     const passwordHash = await hashPassword(password);
     const result = await userModel.createUser({
       name: name.trim(),
@@ -56,7 +63,7 @@ async function createUser(req, res, next) {
       roleName: role,
       phone: String(phone || '').trim(),
       address: String(address || '').trim(),
-      avatarUrl: String(avatarUrl || '').trim(),
+      avatarUrl: normalizedAvatar.imageUrl,
       paymentMethodSettings,
     });
 
@@ -86,13 +93,19 @@ async function updateProfile(req, res, next) {
       return res.status(400).json(buildMessageResponse('El email no es valido'));
     }
 
+    const normalizedAvatar = await normalizeImageUrl(String(avatarUrl || '').trim());
+
+    if (normalizedAvatar.error) {
+      return res.status(400).json(buildMessageResponse(normalizedAvatar.error));
+    }
+
     const result = await userModel.updateProfile({
       userId: req.user.id,
       name: name.trim(),
       email: email.trim(),
       phone: String(phone || '').trim(),
       address: String(address || '').trim(),
-      avatarUrl: String(avatarUrl || '').trim(),
+      avatarUrl: normalizedAvatar.imageUrl,
       paymentMethodSettings,
     });
 

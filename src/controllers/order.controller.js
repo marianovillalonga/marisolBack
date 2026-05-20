@@ -253,6 +253,10 @@ async function updateCustomerOrder(req, res, next) {
       return res.status(400).json(buildMessageResponse('No se puede realizar ese cambio de estado en el pedido'));
     }
 
+    if (result.error === 'ALREADY_DELIVERED') {
+      return res.status(409).json(buildMessageResponse('El pedido ya fue entregado y no admite una segunda confirmacion'));
+    }
+
     if (result.error === 'SELLER_NOT_FOUND') {
       return res.status(404).json(buildMessageResponse('Usuario vendedor no encontrado'));
     }
