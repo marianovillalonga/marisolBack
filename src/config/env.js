@@ -19,6 +19,7 @@ const SMTP_PORT = Number(process.env.SMTP_PORT) || 0;
 const SMTP_SECURE = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.SMTP_SECURE || '').toLowerCase(),
 );
+const SMTP_FAMILY = Number(process.env.SMTP_FAMILY) || 4;
 const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
 const SMTP_CONNECTION_TIMEOUT_MS = Number(process.env.SMTP_CONNECTION_TIMEOUT_MS) || 10000;
@@ -142,6 +143,7 @@ module.exports = {
   SMTP_HOST,
   SMTP_PORT,
   SMTP_SECURE,
+  SMTP_FAMILY,
   SMTP_USER,
   SMTP_PASS,
   SMTP_CONNECTION_TIMEOUT_MS,

@@ -34,6 +34,7 @@ test('sendPasswordResetEmail usa SMTP con nodemailer cuando hay configuracion SM
   process.env.SMTP_HOST = 'smtp.example.com';
   process.env.SMTP_PORT = '587';
   process.env.SMTP_SECURE = 'false';
+  process.env.SMTP_FAMILY = '4';
   process.env.SMTP_USER = 'smtp-user';
   process.env.SMTP_PASS = 'smtp-pass';
   process.env.SMTP_CONNECTION_TIMEOUT_MS = '1234';
@@ -47,6 +48,7 @@ test('sendPasswordResetEmail usa SMTP con nodemailer cuando hay configuracion SM
           assert.equal(config.host, 'smtp.example.com');
           assert.equal(config.port, 587);
           assert.equal(config.secure, false);
+          assert.equal(config.family, 4);
           assert.deepEqual(config.auth, {
             user: 'smtp-user',
             pass: 'smtp-pass',
@@ -95,6 +97,7 @@ test('sendPasswordResetEmail falla en produccion si no hay proveedor configurado
   process.env.SMTP_HOST = '';
   process.env.SMTP_PORT = '';
   process.env.SMTP_SECURE = '';
+  process.env.SMTP_FAMILY = '';
   process.env.SMTP_USER = '';
   process.env.SMTP_PASS = '';
   process.env.SMTP_CONNECTION_TIMEOUT_MS = '';
@@ -127,6 +130,7 @@ test('sendPasswordResetEmail permite preview local fuera de produccion', async (
   process.env.SMTP_HOST = '';
   process.env.SMTP_PORT = '';
   process.env.SMTP_SECURE = '';
+  process.env.SMTP_FAMILY = '';
   process.env.SMTP_USER = '';
   process.env.SMTP_PASS = '';
   process.env.SMTP_CONNECTION_TIMEOUT_MS = '';

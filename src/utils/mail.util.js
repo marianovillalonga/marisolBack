@@ -9,6 +9,7 @@ const {
   SMTP_HOST,
   SMTP_PORT,
   SMTP_SECURE,
+  SMTP_FAMILY,
   SMTP_USER,
   SMTP_PASS,
   SMTP_CONNECTION_TIMEOUT_MS,
@@ -94,6 +95,7 @@ async function sendPasswordResetEmail({ to, resetUrl, expiresAt, requestId = nul
         host: SMTP_HOST,
         port: Number(SMTP_PORT),
         secure: SMTP_SECURE,
+        family: SMTP_FAMILY,
         auth: {
           user: SMTP_USER,
           pass: SMTP_PASS,
