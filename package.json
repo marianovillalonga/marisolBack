@@ -1,7 +1,7 @@
 {
   "name": "marisol-back",
   "version": "1.0.0",
-  "description": "",
+  "description": "Backend comercial Marisol con auth, ventas, pedidos, readiness, smoke y soporte operativo minimo.",
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
@@ -14,7 +14,7 @@
     "smoke": "node scripts/smoke-test.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "Marisol",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {

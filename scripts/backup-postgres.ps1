@@ -1,23 +1,37 @@
+param(
+  [string]$OutputDirectory,
+  [string]$Label = ''
+)
+
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'postgres-common.ps1')
 
+$target = Get-DatabaseTarget
+$pgDumpExecutable = Resolve-PostgresCommand -CommandName 'pg_dump'
 $timestamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
-$projectRoot = Split-Path -Parent $PSScriptRoot
-$backupDir = Join-Path $projectRoot 'backups'
-$backupFile = Join-Path $backupDir "backup_$timestamp.sql"
+$safeLabel = ($Label -replace '[^A-Za-z0-9_-]', '-').Trim('-')
+$backupDirectory = if ($OutputDirectory) { $OutputDirectory } else { Get-DefaultBackupDirectory }
+$fileName = if ($safeLabel) { "backup_${timestamp}_${safeLabel}.sql" } else { "backup_${timestamp}.sql" }
+$backupFile = Join-Path $backupDirectory $fileName
 
-if (-not (Test-Path $backupDir)) {
-  New-Item -ItemType Directory -Path $backupDir | Out-Null
-}
+Ensure-Directory -Path $backupDirectory
 
-if ($env:DATABASE_URL) {
-  & pg_dump $env:DATABASE_URL --no-owner --no-privileges --file $backupFile
-} else {
-  $dbHost = if ($env:DB_HOST) { $env:DB_HOST } else { '127.0.0.1' }
-  $dbPort = if ($env:DB_PORT) { $env:DB_PORT } else { '5432' }
-  $dbUser = if ($env:DB_USER) { $env:DB_USER } else { 'postgres' }
-  $dbName = if ($env:DB_NAME) { $env:DB_NAME } else { 'postgres' }
+Write-Host "Generando backup en: $backupFile"
+Write-Host "Destino: $($target.MaskedTarget)"
 
-  & pg_dump --host $dbHost --port $dbPort --username $dbUser --dbname $dbName --no-owner --no-privileges --file $backupFile
-}
+Invoke-PostgresCommand `
+  -Executable $pgDumpExecutable `
+  -Target $target `
+  -Arguments @(
+    '--no-owner',
+    '--no-privileges',
+    '--clean',
+    '--if-exists',
+    '--file', $backupFile
+  )
 
-Write-Host "Backup generado en: $backupFile"
+Test-BackupFile -BackupFile $backupFile
+$metadataPath = New-BackupMetadata -BackupFile $backupFile -Target $target -Operation 'backup'
+
+Write-Host "Backup generado correctamente: $backupFile"
+Write-Host "Metadata: $metadataPath"

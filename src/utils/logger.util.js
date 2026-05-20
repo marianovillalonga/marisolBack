@@ -140,22 +140,32 @@ function sanitizeRequestId(rawValue) {
   return /^[A-Za-z0-9-_.]+$/.test(trimmed) ? trimmed : null;
 }
 
+function buildRequestLogMeta(req, res, durationMs) {
+  return {
+    requestId: req.requestId || null,
+    method: req.method,
+    path: req.originalUrl,
+    statusCode: res.statusCode,
+    durationMs,
+    ip: req.ip,
+    userId: req.user?.id || null,
+    authPresent: Boolean(req.headers.cookie),
+    userAgent: req.headers['user-agent'] || null,
+    referer: req.headers.referer || null,
+  };
+}
+
 function createRequestLogger() {
   return (req, res, next) => {
-    const startedAt = Date.now();
+    const startedAt = process.hrtime.bigint();
     const requestId = sanitizeRequestId(req.headers['x-request-id']) || crypto.randomUUID();
     req.requestId = requestId;
     res.setHeader('X-Request-Id', requestId);
 
     res.on('finish', () => {
+      const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
       info('http_request', {
-        requestId,
-        method: req.method,
-        path: req.originalUrl,
-        statusCode: res.statusCode,
-        durationMs: Date.now() - startedAt,
-        ip: req.ip,
-        userId: req.user?.id || null,
+        ...buildRequestLogMeta(req, res, Number(durationMs.toFixed(2))),
       });
     });
 
@@ -165,6 +175,7 @@ function createRequestLogger() {
 
 module.exports = {
   createRequestLogger,
+  buildRequestLogMeta,
   debug,
   error,
   info,

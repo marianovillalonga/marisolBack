@@ -48,7 +48,12 @@ test('getDependencyHealth devuelve ok=true cuando config y base estan operativas
     configOk: true,
     databaseOk: true,
     mailOk: true,
+    mode: 'readiness',
+    configError: null,
+    databaseError: null,
+    databaseLatencyMs: result.databaseLatencyMs,
   });
+  assert.equal(typeof result.databaseLatencyMs, 'number');
 
   restoreModules();
 });
@@ -92,6 +97,23 @@ test('getDependencyHealth marca servicio degradado si falla la base o la configu
     configOk: false,
     databaseOk: false,
     mailOk: false,
+    mode: 'readiness',
+    configError: 'config-invalida',
+    databaseError: 'db-down',
+    databaseLatencyMs: result.databaseLatencyMs,
+  });
+  assert.equal(typeof result.databaseLatencyMs, 'number');
+
+  restoreModules();
+});
+
+test('getLivenessHealth devuelve ok=true sin depender de la base', async () => {
+  restoreModules();
+  const { getLivenessHealth } = require('./health.service');
+
+  assert.deepEqual(getLivenessHealth(), {
+    ok: true,
+    mode: 'liveness',
   });
 
   restoreModules();

@@ -10,7 +10,7 @@ const { requireJsonContentType } = require('./middlewares/request-validation.mid
 const { securityHeadersMiddleware } = require('./middlewares/security-headers.middleware');
 const logger = require('./utils/logger.util');
 const { buildHealthResponse } = require('./views/health.view');
-const { getDependencyHealth } = require('./services/health.service');
+const { getDependencyHealth, getLivenessHealth } = require('./services/health.service');
 
 const app = express();
 app.disable('x-powered-by');
@@ -37,11 +37,26 @@ app.use(logger.createRequestLogger());
 app.use('/api', apiRateLimit);
 app.use('/api', validateTrustedOriginForCookieAuth);
 
-app.get('/api/health', async (_req, res, next) => {
+app.get('/api/livez', (req, res) => {
+  const health = getLivenessHealth();
+  res.status(200).json(buildHealthResponse({ ...health, requestId: req.requestId || null }));
+});
+
+app.get('/api/readyz', async (req, res, next) => {
   try {
     const health = await getDependencyHealth();
     const statusCode = health.ok ? 200 : 503;
-    res.status(statusCode).json(buildHealthResponse(health));
+    res.status(statusCode).json(buildHealthResponse({ ...health, requestId: req.requestId || null }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/health', async (req, res, next) => {
+  try {
+    const health = await getDependencyHealth();
+    const statusCode = health.ok ? 200 : 503;
+    res.status(statusCode).json(buildHealthResponse({ ...health, requestId: req.requestId || null }));
   } catch (error) {
     next(error);
   }

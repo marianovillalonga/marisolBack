@@ -24,6 +24,17 @@
 - Restaurar release anterior si falla `health`, `login`, `sales`, `orders` o `stock`.
 - Repetir smoke basico despues del rollback.
 - Si hay corrupcion de datos, restaurar backup en entorno seguro antes de volver a produccion.
+- Backup operativo:
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\backup-postgres.ps1 -Label pre-deploy`
+- Restore operativo:
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\restore-postgres.ps1 -BackupFile .\backups\archivo.sql`
+- Validacion post-restore:
+  - `GET /api/readyz`
+  - `npm run smoke`
+  - login admin
+  - venta
+  - pedido
+  - verificacion de stock
 
 ## Incidente de caida
 - Verificar `GET /api/health`.
@@ -38,6 +49,7 @@
 - Restaurar en entorno aislado para validar integridad.
 - Comparar ultimo backup sano contra produccion.
 - Definir restore parcial o total segun alcance.
+- Si no existen `pg_dump`/`psql` en el entorno, el incidente no esta operativamente cubierto: instalar esos binarios es requisito real.
 
 ## Alertas minimas recomendadas
 - Backend caido.
