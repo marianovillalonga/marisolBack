@@ -1,8 +1,17 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const { Resend } = require('resend');
-const { MAIL_FROM, RESEND_API_KEY } = require('../config/env');
+const {
+  MAIL_FROM,
+  RESEND_API_KEY,
+  SMTP_HOST,
+  SMTP_PORT,
+  SMTP_SECURE,
+  SMTP_USER,
+  SMTP_PASS,
+} = require('../config/env');
 const logger = require('./logger.util');
 
 const previewDirectory = path.resolve(__dirname, '../../tmp/mail');
@@ -18,6 +27,10 @@ class MailDeliveryError extends Error {
 
 function ensurePreviewDirectory() {
   fs.mkdirSync(previewDirectory, { recursive: true });
+}
+
+function hasSmtpConfig() {
+  return [SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS].every((value) => String(value || '').trim());
 }
 
 function buildPasswordResetMail({ resetUrl, expiresAt, to }) {
@@ -61,11 +74,43 @@ function buildPasswordResetMail({ resetUrl, expiresAt, to }) {
 }
 
 function isMailDeliveryAvailable() {
-  return Boolean(RESEND_API_KEY) || !isProduction;
+  return Boolean(RESEND_API_KEY) || hasSmtpConfig() || !isProduction;
 }
 
 async function sendPasswordResetEmail({ to, resetUrl, expiresAt, requestId = null }) {
   const emailPayload = buildPasswordResetMail({ to, resetUrl, expiresAt });
+
+  if (hasSmtpConfig()) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: SMTP_HOST,
+        port: Number(SMTP_PORT),
+        secure: SMTP_SECURE,
+        auth: {
+          user: SMTP_USER,
+          pass: SMTP_PASS,
+        },
+      });
+
+      const result = await transporter.sendMail(emailPayload);
+
+      logger.info('password_reset_email_sent', {
+        requestId,
+        provider: 'smtp',
+        messageId: result.messageId || null,
+      });
+
+      return {
+        deliveryMode: 'smtp',
+        messageId: result.messageId || null,
+      };
+    } catch (error) {
+      throw new MailDeliveryError(
+        'MAIL_DELIVERY_FAILED',
+        error instanceof Error ? error.message : 'No se pudo enviar el email de recuperacion por SMTP.',
+      );
+    }
+  }
 
   if (RESEND_API_KEY) {
     try {
@@ -128,6 +173,8 @@ async function sendPasswordResetEmail({ to, resetUrl, expiresAt, requestId = nul
 
 module.exports = {
   MailDeliveryError,
+  buildPasswordResetMail,
+  hasSmtpConfig,
   isMailDeliveryAvailable,
   sendPasswordResetEmail,
 };

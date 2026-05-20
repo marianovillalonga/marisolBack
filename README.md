@@ -23,7 +23,9 @@ Backend en Node.js + Express + PostgreSQL para operaciones comerciales: auth, us
 - `GET /api/health`
 
 ## Requisitos operativos reales
-- Mail provider configurado en produccion (`RESEND_API_KEY`, `MAIL_FROM`)
+- Mail provider configurado en produccion:
+  - `RESEND_API_KEY` + `MAIL_FROM`, o
+  - `SMTP_HOST` + `SMTP_PORT` + `SMTP_USER` + `SMTP_PASS` + `MAIL_FROM`
 - `FRONTEND_URLS` correcto para CORS/CSRF
 - `pg_dump` y `psql` disponibles para backup/restore, o `PG_BIN_DIR`
 

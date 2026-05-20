@@ -14,6 +14,13 @@ const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'marisol_auth';
 const PASSWORD_RESET_TOKEN_TTL_MINUTES = Number(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES) || 30;
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const MAIL_FROM = process.env.MAIL_FROM || '';
+const SMTP_HOST = process.env.SMTP_HOST || '';
+const SMTP_PORT = Number(process.env.SMTP_PORT) || 0;
+const SMTP_SECURE = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.SMTP_SECURE || '').toLowerCase(),
+);
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = process.env.SMTP_PASS || '';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const ADMIN_NAME = process.env.ADMIN_NAME || 'Administrador';
@@ -41,6 +48,10 @@ function validateRuntimeConfig() {
   const issues = [];
   const hasDatabaseUrl = Boolean(DATABASE_URL.trim());
   const hasLocalDbConfig = [DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME].every((value) =>
+    String(value || '').trim(),
+  );
+
+  const hasSmtpConfig = [SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS].every((value) =>
     String(value || '').trim(),
   );
 
@@ -86,12 +97,18 @@ function validateRuntimeConfig() {
     issues.push('PASSWORD_RESET_TOKEN_TTL_MINUTES debe estar entre 5 y 120');
   }
 
-  if (RESEND_API_KEY && !MAIL_FROM.trim()) {
-    issues.push('MAIL_FROM es obligatorio cuando RESEND_API_KEY esta configurada');
+  if ((RESEND_API_KEY || hasSmtpConfig) && !MAIL_FROM.trim()) {
+    issues.push('MAIL_FROM es obligatorio cuando hay un proveedor de email configurado');
   }
 
-  if (isProduction && !RESEND_API_KEY.trim()) {
-    issues.push('RESEND_API_KEY es obligatorio en produccion para recuperar passwords');
+  if ([SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS].some((value) => String(value || '').trim()) && !hasSmtpConfig) {
+    issues.push('SMTP_HOST, SMTP_PORT, SMTP_USER y SMTP_PASS deben configurarse completos para usar nodemailer');
+  }
+
+  if (isProduction && !RESEND_API_KEY.trim() && !hasSmtpConfig) {
+    issues.push(
+      'Debes configurar RESEND_API_KEY o SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS en produccion para recuperar passwords',
+    );
   }
 
   if (isProduction && !MAIL_FROM.trim()) {
@@ -119,6 +136,11 @@ module.exports = {
   PASSWORD_RESET_TOKEN_TTL_MINUTES,
   RESEND_API_KEY,
   MAIL_FROM,
+  SMTP_HOST,
+  SMTP_PORT,
+  SMTP_SECURE,
+  SMTP_USER,
+  SMTP_PASS,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   ADMIN_NAME,
