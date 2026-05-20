@@ -1,3 +1,10 @@
 node_modules
 .env
 .prisma
+
+# Logs
+logs
+
+#tmp/mail
+tmp/mail
+logs

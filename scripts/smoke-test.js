@@ -38,6 +38,21 @@ function sleep(ms) {
   });
 }
 
+function formatFetchError(error) {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+
+  const causeMessage =
+    error.cause instanceof Error
+      ? error.cause.message
+      : typeof error.cause === 'string'
+        ? error.cause
+        : null;
+
+  return causeMessage ? `${error.message} (${causeMessage})` : error.message;
+}
+
 class SmokeApiClient {
   constructor() {
     this.cookieJar = new Map();
@@ -88,6 +103,7 @@ class SmokeApiClient {
       'X-Request-Id': `smoke-${createRunId()}`,
       ...headers,
     };
+    const requestLabel = `${method} ${pathname}`;
 
     if (body !== undefined) {
       finalHeaders['Content-Type'] = 'application/json';
@@ -104,22 +120,36 @@ class SmokeApiClient {
     }
 
     let response;
+    let firstError = null;
 
-    try {
-      response = await fetch(buildUrl(pathname), {
-        method,
-        headers: finalHeaders,
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-    } catch (error) {
-      await sleep(500);
-      response = await fetch(buildUrl(pathname), {
-        method,
-        headers: finalHeaders,
-        body: body === undefined ? undefined : JSON.stringify(body),
-      }).catch(() => {
-        throw error;
-      });
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => {
+        abortController.abort(new Error(`Timeout de red en ${requestLabel}`));
+      }, 15000);
+
+      try {
+        response = await fetch(buildUrl(pathname), {
+          method,
+          headers: finalHeaders,
+          body: body === undefined ? undefined : JSON.stringify(body),
+          signal: abortController.signal,
+        });
+        clearTimeout(timeoutId);
+        break;
+      } catch (error) {
+        clearTimeout(timeoutId);
+
+        if (!firstError) {
+          firstError = error;
+        }
+
+        if (attempt === 2) {
+          throw new Error(`Fallo de red en ${requestLabel}: ${formatFetchError(firstError)}`);
+        }
+
+        await sleep(750);
+      }
     }
 
     this.applySetCookie(response);
@@ -176,6 +206,37 @@ function getPreviewResetToken(email, requestedAtMs) {
   }
 
   throw new Error(`No se encontro un preview de reset util para ${email}`);
+}
+
+async function waitForServerReady({ timeoutMs = 15000, pollIntervalMs = 500 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = null;
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(buildUrl('/api/health'), {
+        headers: {
+          Accept: 'application/json',
+          Connection: 'close',
+          'X-Request-Id': `smoke-health-${createRunId()}`,
+        },
+      });
+
+      if (response.ok) {
+        return;
+      }
+
+      lastError = new Error(`Health respondio ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+
+    await sleep(pollIntervalMs);
+  }
+
+  throw new Error(
+    `El backend no quedo listo despues de esperar ${timeoutMs}ms: ${formatFetchError(lastError)}`,
+  );
 }
 
 async function main() {
@@ -488,6 +549,7 @@ async function main() {
 
   const resetToken = getPreviewResetToken(workerEmail, passwordResetRequestedAt);
   const resetPassword = `ResetPass-${runId}!2026`;
+  await waitForServerReady();
   console.log('[smoke] Reset password con token de preview');
   const resetPasswordResponse = await publicApi.request('/api/auth/password-reset', {
     method: 'POST',
