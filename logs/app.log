@@ -728,3 +728,7 @@
 {"timestamp":"2026-05-20T22:23:14.554Z","level":"info","message":"server_started","port":4000}
 {"timestamp":"2026-05-20T22:26:02.679Z","level":"warn","message":"server_shutdown_requested","signal":"SIGINT"}
 {"timestamp":"2026-05-20T22:26:05.316Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-20T22:35:35.099Z","level":"info","message":"password_reset_email_delivery_started","requestId":"test-request","provider":"smtp"}
+{"timestamp":"2026-05-20T22:35:35.100Z","level":"info","message":"password_reset_email_sent","requestId":"test-request","provider":"smtp","messageId":"smtp-message-id"}
+{"timestamp":"2026-05-20T22:35:35.135Z","level":"info","message":"password_reset_email_preview_saved","requestId":"test-request","provider":"file","previewFileName":"1779316535134-5980286b-9920-4288-a282-4f95533c658c.json"}
+{"timestamp":"2026-05-20T22:35:35.910Z","level":"info","message":"server_started","port":4000}

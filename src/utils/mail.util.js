@@ -11,6 +11,9 @@ const {
   SMTP_SECURE,
   SMTP_USER,
   SMTP_PASS,
+  SMTP_CONNECTION_TIMEOUT_MS,
+  SMTP_GREETING_TIMEOUT_MS,
+  SMTP_SOCKET_TIMEOUT_MS,
 } = require('../config/env');
 const logger = require('./logger.util');
 
@@ -82,6 +85,11 @@ async function sendPasswordResetEmail({ to, resetUrl, expiresAt, requestId = nul
 
   if (hasSmtpConfig()) {
     try {
+      logger.info('password_reset_email_delivery_started', {
+        requestId,
+        provider: 'smtp',
+      });
+
       const transporter = nodemailer.createTransport({
         host: SMTP_HOST,
         port: Number(SMTP_PORT),
@@ -90,6 +98,9 @@ async function sendPasswordResetEmail({ to, resetUrl, expiresAt, requestId = nul
           user: SMTP_USER,
           pass: SMTP_PASS,
         },
+        connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+        greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+        socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
       });
 
       const result = await transporter.sendMail(emailPayload);
@@ -105,6 +116,12 @@ async function sendPasswordResetEmail({ to, resetUrl, expiresAt, requestId = nul
         messageId: result.messageId || null,
       };
     } catch (error) {
+      logger.error('password_reset_email_delivery_failed', {
+        requestId,
+        provider: 'smtp',
+        error: error instanceof Error ? error.message : String(error),
+      });
+
       throw new MailDeliveryError(
         'MAIL_DELIVERY_FAILED',
         error instanceof Error ? error.message : 'No se pudo enviar el email de recuperacion por SMTP.',

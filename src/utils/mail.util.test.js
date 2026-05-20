@@ -36,6 +36,9 @@ test('sendPasswordResetEmail usa SMTP con nodemailer cuando hay configuracion SM
   process.env.SMTP_SECURE = 'false';
   process.env.SMTP_USER = 'smtp-user';
   process.env.SMTP_PASS = 'smtp-pass';
+  process.env.SMTP_CONNECTION_TIMEOUT_MS = '1234';
+  process.env.SMTP_GREETING_TIMEOUT_MS = '2345';
+  process.env.SMTP_SOCKET_TIMEOUT_MS = '3456';
 
   Module._load = function mockModuleLoader(request, parent, isMain) {
     if (request === 'nodemailer') {
@@ -48,6 +51,9 @@ test('sendPasswordResetEmail usa SMTP con nodemailer cuando hay configuracion SM
             user: 'smtp-user',
             pass: 'smtp-pass',
           });
+          assert.equal(config.connectionTimeout, 1234);
+          assert.equal(config.greetingTimeout, 2345);
+          assert.equal(config.socketTimeout, 3456);
 
           return {
             async sendMail(payload) {
@@ -91,6 +97,9 @@ test('sendPasswordResetEmail falla en produccion si no hay proveedor configurado
   process.env.SMTP_SECURE = '';
   process.env.SMTP_USER = '';
   process.env.SMTP_PASS = '';
+  process.env.SMTP_CONNECTION_TIMEOUT_MS = '';
+  process.env.SMTP_GREETING_TIMEOUT_MS = '';
+  process.env.SMTP_SOCKET_TIMEOUT_MS = '';
 
   const { MailDeliveryError, sendPasswordResetEmail } = loadMailModule();
 
@@ -120,6 +129,9 @@ test('sendPasswordResetEmail permite preview local fuera de produccion', async (
   process.env.SMTP_SECURE = '';
   process.env.SMTP_USER = '';
   process.env.SMTP_PASS = '';
+  process.env.SMTP_CONNECTION_TIMEOUT_MS = '';
+  process.env.SMTP_GREETING_TIMEOUT_MS = '';
+  process.env.SMTP_SOCKET_TIMEOUT_MS = '';
 
   const { sendPasswordResetEmail } = loadMailModule();
   const result = await sendPasswordResetEmail({
