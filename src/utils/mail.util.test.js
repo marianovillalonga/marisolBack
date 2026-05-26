@@ -3,9 +3,13 @@ const assert = require('node:assert/strict');
 const Module = require('node:module');
 
 const originalLoad = Module._load;
+const PASSWORD_RESET_SUBJECT = 'Recuperar contrase\u00f1a';
+const PASSWORD_RESET_CTA = 'Restablecer contrase\u00f1a';
+const PASSWORD_RESET_COPY = /recuperar tu contrase\u00f1a/i;
 
 function loadMailModule() {
   delete require.cache[require.resolve('../config/env')];
+  delete require.cache[require.resolve('../services/email.service')];
   delete require.cache[require.resolve('./mail.util')];
   return require('./mail.util');
 }
@@ -24,99 +28,14 @@ test.afterEach(() => {
   Module._load = originalLoad;
 });
 
-test('sendPasswordResetEmail usa SMTP con nodemailer cuando hay configuracion SMTP', async () => {
+test('sendEmail usa Resend cuando RESEND_API_KEY esta configurada', async () => {
   const snapshot = { ...process.env };
-  let capturedPayload = null;
-
-  process.env.NODE_ENV = 'production';
-  process.env.RESEND_API_KEY = '';
-  process.env.MAIL_FROM = 'Sistema <no-reply@example.com>';
-  process.env.SMTP_HOST = 'smtp.example.com';
-  process.env.SMTP_PORT = '587';
-  process.env.SMTP_SECURE = 'false';
-  process.env.SMTP_FAMILY = '4';
-  process.env.SMTP_USER = 'smtp-user';
-  process.env.SMTP_PASS = 'smtp-pass';
-  process.env.SMTP_CONNECTION_TIMEOUT_MS = '1234';
-  process.env.SMTP_GREETING_TIMEOUT_MS = '2345';
-  process.env.SMTP_SOCKET_TIMEOUT_MS = '3456';
-
-  Module._load = function mockModuleLoader(request, parent, isMain) {
-    if (request === 'nodemailer') {
-      return {
-        createTransport(config) {
-          assert.equal(config.host, 'smtp.example.com');
-          assert.equal(config.port, 587);
-          assert.equal(config.secure, false);
-          assert.equal(config.family, 4);
-          assert.equal(typeof config.lookup, 'function');
-          assert.deepEqual(config.auth, {
-            user: 'smtp-user',
-            pass: 'smtp-pass',
-          });
-          assert.equal(config.connectionTimeout, 1234);
-          assert.equal(config.greetingTimeout, 2345);
-          assert.equal(config.socketTimeout, 3456);
-
-          return {
-            async sendMail(payload) {
-              capturedPayload = payload;
-              return {
-                messageId: 'smtp-message-id',
-              };
-            },
-          };
-        },
-      };
-    }
-
-    return originalLoad(request, parent, isMain);
-  };
-
-  const { sendPasswordResetEmail } = loadMailModule();
-  const result = await sendPasswordResetEmail({
-    to: 'test@example.com',
-    resetUrl: 'https://app.example.com/reset-password?token=abc',
-    expiresAt: new Date('2026-05-20T12:00:00.000Z'),
-    requestId: 'test-request',
-  });
-
-  assert.equal(result.deliveryMode, 'smtp');
-  assert.equal(result.messageId, 'smtp-message-id');
-  assert.equal(capturedPayload.to, 'test@example.com');
-  assert.match(capturedPayload.text, /restablecer tu contrasena/i);
-
-  restoreEnv(snapshot);
-});
-
-test('sendPasswordResetEmail prioriza Resend sobre SMTP si ambos estan configurados', async () => {
-  const snapshot = { ...process.env };
-  let smtpUsed = false;
 
   process.env.NODE_ENV = 'production';
   process.env.RESEND_API_KEY = 're_test_key';
-  process.env.MAIL_FROM = 'Sistema <no-reply@example.com>';
-  process.env.SMTP_HOST = 'smtp.example.com';
-  process.env.SMTP_PORT = '587';
-  process.env.SMTP_SECURE = 'false';
-  process.env.SMTP_FAMILY = '4';
-  process.env.SMTP_USER = 'smtp-user';
-  process.env.SMTP_PASS = 'smtp-pass';
+  process.env.MAIL_FROM = 'noreply@mariovillalonga.website';
 
   Module._load = function mockModuleLoader(request, parent, isMain) {
-    if (request === 'nodemailer') {
-      return {
-        createTransport() {
-          smtpUsed = true;
-          return {
-            async sendMail() {
-              return { messageId: 'smtp-message-id' };
-            },
-          };
-        },
-      };
-    }
-
     if (request === 'resend') {
       return {
         Resend: class MockResend {
@@ -127,7 +46,11 @@ test('sendPasswordResetEmail prioriza Resend sobre SMTP si ambos estan configura
           get emails() {
             return {
               send: async (payload) => {
+                assert.equal(payload.from, 'noreply@mariovillalonga.website');
                 assert.equal(payload.to, 'test@example.com');
+                assert.equal(payload.subject, 'Asunto');
+                assert.equal(payload.html, '<p>Hola</p>');
+                assert.equal(payload.text, 'Hola');
                 return {
                   data: {
                     id: 're_email_id',
@@ -143,46 +66,85 @@ test('sendPasswordResetEmail prioriza Resend sobre SMTP si ambos estan configura
     return originalLoad(request, parent, isMain);
   };
 
-  const { sendPasswordResetEmail } = loadMailModule();
-  const result = await sendPasswordResetEmail({
+  const { sendEmail } = loadMailModule();
+  const result = await sendEmail({
     to: 'test@example.com',
-    resetUrl: 'https://app.example.com/reset-password?token=abc',
-    expiresAt: new Date('2026-05-20T12:00:00.000Z'),
+    subject: 'Asunto',
+    html: '<p>Hola</p>',
+    text: 'Hola',
     requestId: 'test-request',
   });
 
   assert.equal(result.deliveryMode, 'resend');
   assert.equal(result.emailId, 're_email_id');
-  assert.equal(smtpUsed, false);
 
   restoreEnv(snapshot);
 });
 
-test('sendPasswordResetEmail falla en produccion si no hay proveedor configurado', async () => {
+test('sendPasswordResetEmail arma el email esperado con Resend', async () => {
+  const snapshot = { ...process.env };
+
+  process.env.NODE_ENV = 'production';
+  process.env.RESEND_API_KEY = 're_test_key';
+  process.env.MAIL_FROM = 'noreply@mariovillalonga.website';
+
+  Module._load = function mockModuleLoader(request, parent, isMain) {
+    if (request === 'resend') {
+      return {
+        Resend: class MockResend {
+          get emails() {
+            return {
+              send: async (payload) => {
+                assert.equal(payload.to, 'test@example.com');
+                assert.equal(payload.subject, PASSWORD_RESET_SUBJECT);
+                assert.match(payload.html, /https:\/\/app\.example\.com\/reset-password\?token=abc/);
+                assert.match(payload.html, new RegExp(PASSWORD_RESET_CTA));
+                assert.match(payload.text, PASSWORD_RESET_COPY);
+                return {
+                  data: {
+                    id: 'reset_email_id',
+                  },
+                };
+              },
+            };
+          }
+        },
+      };
+    }
+
+    return originalLoad(request, parent, isMain);
+  };
+
+  const { sendPasswordResetEmail } = loadMailModule();
+  const result = await sendPasswordResetEmail(
+    'test@example.com',
+    'https://app.example.com/reset-password?token=abc',
+    {
+      requestId: 'test-request',
+    },
+  );
+
+  assert.equal(result.deliveryMode, 'resend');
+  assert.equal(result.emailId, 'reset_email_id');
+
+  restoreEnv(snapshot);
+});
+
+test('sendEmail falla en produccion si falta RESEND_API_KEY', async () => {
   const snapshot = { ...process.env };
 
   process.env.NODE_ENV = 'production';
   process.env.RESEND_API_KEY = '';
-  process.env.MAIL_FROM = '';
-  process.env.SMTP_HOST = '';
-  process.env.SMTP_PORT = '';
-  process.env.SMTP_SECURE = '';
-  process.env.SMTP_FAMILY = '';
-  process.env.SMTP_USER = '';
-  process.env.SMTP_PASS = '';
-  process.env.SMTP_CONNECTION_TIMEOUT_MS = '';
-  process.env.SMTP_GREETING_TIMEOUT_MS = '';
-  process.env.SMTP_SOCKET_TIMEOUT_MS = '';
+  process.env.MAIL_FROM = 'noreply@mariovillalonga.website';
 
-  const { MailDeliveryError, sendPasswordResetEmail } = loadMailModule();
+  const { MailDeliveryError, sendEmail } = loadMailModule();
 
   await assert.rejects(
     () =>
-      sendPasswordResetEmail({
+      sendEmail({
         to: 'test@example.com',
-        resetUrl: 'https://app.example.com/reset-password?token=abc',
-        expiresAt: new Date('2026-05-20T12:00:00.000Z'),
-        requestId: 'test-request',
+        subject: 'Asunto',
+        text: 'Hola',
       }),
     (error) =>
       error instanceof MailDeliveryError && error.code === 'MAIL_DELIVERY_NOT_CONFIGURED',
@@ -191,28 +153,18 @@ test('sendPasswordResetEmail falla en produccion si no hay proveedor configurado
   restoreEnv(snapshot);
 });
 
-test('sendPasswordResetEmail permite preview local fuera de produccion', async () => {
+test('sendEmail permite preview local fuera de produccion', async () => {
   const snapshot = { ...process.env };
 
   process.env.NODE_ENV = 'development';
   process.env.RESEND_API_KEY = '';
-  process.env.MAIL_FROM = '';
-  process.env.SMTP_HOST = '';
-  process.env.SMTP_PORT = '';
-  process.env.SMTP_SECURE = '';
-  process.env.SMTP_FAMILY = '';
-  process.env.SMTP_USER = '';
-  process.env.SMTP_PASS = '';
-  process.env.SMTP_CONNECTION_TIMEOUT_MS = '';
-  process.env.SMTP_GREETING_TIMEOUT_MS = '';
-  process.env.SMTP_SOCKET_TIMEOUT_MS = '';
+  process.env.MAIL_FROM = 'noreply@mariovillalonga.website';
 
-  const { sendPasswordResetEmail } = loadMailModule();
-  const result = await sendPasswordResetEmail({
+  const { sendEmail } = loadMailModule();
+  const result = await sendEmail({
     to: 'test@example.com',
-    resetUrl: 'https://app.example.com/reset-password?token=abc',
-    expiresAt: new Date('2026-05-20T12:00:00.000Z'),
-    requestId: 'test-request',
+    subject: 'Asunto',
+    text: 'Hola',
   });
 
   assert.equal(result.deliveryMode, 'file');

@@ -13,18 +13,7 @@ const AUTH_TOKEN_TTL = process.env.AUTH_TOKEN_TTL || '8h';
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'marisol_auth';
 const PASSWORD_RESET_TOKEN_TTL_MINUTES = Number(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES) || 30;
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const MAIL_FROM = process.env.MAIL_FROM || '';
-const SMTP_HOST = process.env.SMTP_HOST || '';
-const SMTP_PORT = Number(process.env.SMTP_PORT) || 0;
-const SMTP_SECURE = ['1', 'true', 'yes', 'on'].includes(
-  String(process.env.SMTP_SECURE || '').toLowerCase(),
-);
-const SMTP_FAMILY = Number(process.env.SMTP_FAMILY) || 4;
-const SMTP_USER = process.env.SMTP_USER || '';
-const SMTP_PASS = process.env.SMTP_PASS || '';
-const SMTP_CONNECTION_TIMEOUT_MS = Number(process.env.SMTP_CONNECTION_TIMEOUT_MS) || 10000;
-const SMTP_GREETING_TIMEOUT_MS = Number(process.env.SMTP_GREETING_TIMEOUT_MS) || 10000;
-const SMTP_SOCKET_TIMEOUT_MS = Number(process.env.SMTP_SOCKET_TIMEOUT_MS) || 20000;
+const MAIL_FROM = process.env.MAIL_FROM || 'noreply@mariovillalonga.website';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const ADMIN_NAME = process.env.ADMIN_NAME || 'Administrador';
@@ -52,10 +41,6 @@ function validateRuntimeConfig() {
   const issues = [];
   const hasDatabaseUrl = Boolean(DATABASE_URL.trim());
   const hasLocalDbConfig = [DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME].every((value) =>
-    String(value || '').trim(),
-  );
-
-  const hasSmtpConfig = [SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS].every((value) =>
     String(value || '').trim(),
   );
 
@@ -101,18 +86,12 @@ function validateRuntimeConfig() {
     issues.push('PASSWORD_RESET_TOKEN_TTL_MINUTES debe estar entre 5 y 120');
   }
 
-  if ((RESEND_API_KEY || hasSmtpConfig) && !MAIL_FROM.trim()) {
+  if (RESEND_API_KEY && !MAIL_FROM.trim()) {
     issues.push('MAIL_FROM es obligatorio cuando hay un proveedor de email configurado');
   }
 
-  if ([SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS].some((value) => String(value || '').trim()) && !hasSmtpConfig) {
-    issues.push('SMTP_HOST, SMTP_PORT, SMTP_USER y SMTP_PASS deben configurarse completos para usar nodemailer');
-  }
-
-  if (isProduction && !RESEND_API_KEY.trim() && !hasSmtpConfig) {
-    issues.push(
-      'Debes configurar RESEND_API_KEY o SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS en produccion para recuperar passwords',
-    );
+  if (isProduction && !RESEND_API_KEY.trim()) {
+    issues.push('Debes configurar RESEND_API_KEY en produccion para recuperar passwords');
   }
 
   if (isProduction && !MAIL_FROM.trim()) {
@@ -140,15 +119,6 @@ module.exports = {
   PASSWORD_RESET_TOKEN_TTL_MINUTES,
   RESEND_API_KEY,
   MAIL_FROM,
-  SMTP_HOST,
-  SMTP_PORT,
-  SMTP_SECURE,
-  SMTP_FAMILY,
-  SMTP_USER,
-  SMTP_PASS,
-  SMTP_CONNECTION_TIMEOUT_MS,
-  SMTP_GREETING_TIMEOUT_MS,
-  SMTP_SOCKET_TIMEOUT_MS,
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   ADMIN_NAME,

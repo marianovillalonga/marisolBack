@@ -752,3 +752,42 @@
 {"timestamp":"2026-05-20T22:49:33.570Z","level":"info","message":"password_reset_email_sent","requestId":"test-request","provider":"resend","emailId":"re_email_id"}
 {"timestamp":"2026-05-20T22:49:33.600Z","level":"info","message":"password_reset_email_preview_saved","requestId":"test-request","provider":"file","previewFileName":"1779317373600-2cd04605-602a-4f06-bf22-72ac902f1a45.json"}
 {"timestamp":"2026-05-20T22:49:34.350Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T13:59:15.112Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:02:18.910Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:02:30.439Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:02:35.630Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:02:42.582Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:03:04.702Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:04:23.480Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:04:26.926Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:04:53.184Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:04:59.460Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:05:09.403Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:05:36.472Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:06:36.604Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:07:02.747Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:07:35.777Z","level":"info","message":"email_sent","requestId":"test-request","provider":"resend","emailId":"re_email_id","to":"test@example.com","subject":"Asunto","from":"noreply@mariovillalonga.website"}
+{"timestamp":"2026-05-26T14:07:35.782Z","level":"info","message":"email_sent","requestId":"test-request","provider":"resend","emailId":"reset_email_id","to":"test@example.com","subject":"Recuperar contraseña","from":"noreply@mariovillalonga.website"}
+{"timestamp":"2026-05-26T14:07:35.861Z","level":"info","message":"email_preview_saved","requestId":null,"provider":"file","previewFileName":"1779804455860-7b401d80-9c8c-47b4-b3d7-999e11ad0ec9.json","to":"test@example.com","subject":"Asunto"}
+{"timestamp":"2026-05-26T14:07:36.531Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:07:43.631Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:09:27.166Z","level":"info","message":"email_sent","requestId":"test-request","provider":"resend","emailId":"re_email_id","to":"test@example.com","subject":"Asunto","from":"noreply@mariovillalonga.website"}
+{"timestamp":"2026-05-26T14:09:27.171Z","level":"info","message":"email_sent","requestId":"test-request","provider":"resend","emailId":"reset_email_id","to":"test@example.com","subject":"Recuperar contraseña","from":"noreply@mariovillalonga.website"}
+{"timestamp":"2026-05-26T14:09:27.257Z","level":"info","message":"email_preview_saved","requestId":null,"provider":"file","previewFileName":"1779804567256-f369caec-8a9e-4268-82f9-ccdec7a61571.json","to":"test@example.com","subject":"Asunto"}
+{"timestamp":"2026-05-26T14:09:28.095Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:11:06.405Z","level":"info","message":"http_request","requestId":"30b884fe-3208-4745-b002-68fc1250f37e","method":"GET","path":"/api/auth/me","statusCode":401,"durationMs":4,"ip":"::1","userId":null,"authPresent":false,"userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36","referer":"http://localhost:5173/"}
+{"timestamp":"2026-05-26T14:11:06.408Z","level":"info","message":"http_request","requestId":"fed16f45-7f9a-4856-a57a-f760162d8641","method":"GET","path":"/api/auth/me","statusCode":401,"durationMs":0.58,"ip":"::1","userId":null,"authPresent":false,"userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36","referer":"http://localhost:5173/"}
+{"timestamp":"2026-05-26T14:11:12.066Z","level":"info","message":"email_preview_saved","requestId":"47c79413-2894-4411-988f-253460b33a5f","provider":"file","previewFileName":"1779804672065-35da4fa1-16ff-48be-91fe-5800e8ce7e88.json","to":"marianovillalonga94.mv@gmail.com","subject":"Recuperar contraseña"}
+{"timestamp":"2026-05-26T14:11:12.148Z","level":"info","message":"http_request","requestId":"47c79413-2894-4411-988f-253460b33a5f","method":"POST","path":"/api/auth/forgot-password","statusCode":202,"durationMs":1059.54,"ip":"::1","userId":null,"authPresent":false,"userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36","referer":"http://localhost:5173/auth/forgot-password"}
+{"timestamp":"2026-05-26T14:11:12.776Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:11:23.972Z","level":"info","message":"email_sent","requestId":"9915e845-bf5e-49c0-a85a-5dc2a559c792","provider":"resend","emailId":null,"to":"marianovillalonga94.mv@gmail.com","subject":"Recuperar contraseña","from":"Sistema <tu-cuenta@gmail.com>"}
+{"timestamp":"2026-05-26T14:11:24.020Z","level":"info","message":"http_request","requestId":"9915e845-bf5e-49c0-a85a-5dc2a559c792","method":"POST","path":"/api/auth/forgot-password","statusCode":202,"durationMs":780.12,"ip":"::1","userId":null,"authPresent":false,"userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36","referer":"http://localhost:5173/auth/forgot-password"}
+{"timestamp":"2026-05-26T14:13:43.161Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:14:01.697Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:14:09.823Z","level":"info","message":"email_sent","requestId":"test-request","provider":"resend","emailId":"re_email_id","to":"test@example.com","subject":"Asunto","from":"noreply@mariovillalonga.website"}
+{"timestamp":"2026-05-26T14:14:09.829Z","level":"info","message":"email_sent","requestId":"test-request","provider":"resend","emailId":"reset_email_id","to":"test@example.com","subject":"Recuperar contraseña","from":"noreply@mariovillalonga.website"}
+{"timestamp":"2026-05-26T14:14:09.908Z","level":"info","message":"email_preview_saved","requestId":null,"provider":"file","previewFileName":"1779804849907-f70bd007-b2c8-4c07-a308-542c6c417327.json","to":"test@example.com","subject":"Asunto"}
+{"timestamp":"2026-05-26T14:14:10.593Z","level":"info","message":"server_started","port":4000}
+{"timestamp":"2026-05-26T14:14:25.372Z","level":"info","message":"email_sent","requestId":"email-test-script","provider":"resend","emailId":"4ef9d6aa-d117-4bca-b339-b99404ea8bf9","to":"marianovillalonga94.mv@gmail.com","subject":"Email de prueba","from":"noreply@mariovillalonga.website"}
+{"timestamp":"2026-05-26T14:14:50.375Z","level":"info","message":"email_sent","requestId":"fba36a21-ec87-444f-8771-a3c42a39bf30","provider":"resend","emailId":"3c2c8625-9366-4f57-83eb-38cc431b84d0","to":"marianovillalonga94.mv@gmail.com","subject":"Recuperar contraseña","from":"noreply@mariovillalonga.website"}
+{"timestamp":"2026-05-26T14:14:50.417Z","level":"info","message":"http_request","requestId":"fba36a21-ec87-444f-8771-a3c42a39bf30","method":"POST","path":"/api/auth/forgot-password","statusCode":202,"durationMs":1082.72,"ip":"::1","userId":null,"authPresent":false,"userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36","referer":"http://localhost:5173/auth/forgot-password"}

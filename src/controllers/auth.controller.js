@@ -170,10 +170,7 @@ async function requestPasswordReset(req, res, next) {
         requestId: req.requestId || null,
       });
 
-      await sendPasswordResetEmail({
-        to: user.email,
-        resetUrl,
-        expiresAt,
+      await sendPasswordResetEmail(user.email, resetUrl, {
         requestId: req.requestId || null,
       });
     } catch (error) {
