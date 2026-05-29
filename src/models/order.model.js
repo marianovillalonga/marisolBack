@@ -194,8 +194,10 @@ class OrderModel {
     `;
   }
 
-  async listOrders(search = '', pagination = { limit: 20, offset: 0 }) {
+  async listOrders(search = '', pagination = { limit: 20, offset: 0 }, status = 'all') {
     const normalizedSearch = `%${search.trim().toLowerCase()}%`;
+    const allowedStatuses = ['registrado', 'en_progreso', 'pendiente', 'hecho', 'entregado'];
+    const normalizedStatus = allowedStatuses.includes(status) ? status : 'all';
     const filtersQuery = `
       WHERE
         (
@@ -208,6 +210,7 @@ class OrderModel {
           OR LOWER(COALESCE(p.agasajado_nombre, '')) LIKE $1
           OR LOWER(COALESCE(p.tematica, '')) LIKE $1
         )
+        AND ($2 = 'all' OR p.estado = $2)
     `;
 
     const [{ rows }, countResult] = await Promise.all([
@@ -217,10 +220,10 @@ class OrderModel {
         ${filtersQuery}
         GROUP BY p.id, u.nombre
         ORDER BY p.fecha_pedido DESC, p.id DESC
-        LIMIT $2
-        OFFSET $3
+        LIMIT $3
+        OFFSET $4
       `,
-      [normalizedSearch, pagination.limit, pagination.offset],
+      [normalizedSearch, normalizedStatus, pagination.limit, pagination.offset],
     ),
       pool.query(
         `
@@ -230,7 +233,7 @@ class OrderModel {
           LEFT JOIN pedido_detalles pd ON pd.pedido_id = p.id
           ${filtersQuery}
         `,
-        [normalizedSearch],
+        [normalizedSearch, normalizedStatus],
       ),
     ]);
 

@@ -11,7 +11,7 @@ const {
 async function listOrders(req, res, next) {
   try {
     const pagination = parsePaginationParams(req.query);
-    const result = await orderModel.listOrders(req.query.search || '', pagination);
+    const result = await orderModel.listOrders(req.query.search || '', pagination, req.query.status || 'all');
     return res
       .status(200)
       .json(buildOrdersResponse(result.orders, { ...pagination, total: result.total }));
