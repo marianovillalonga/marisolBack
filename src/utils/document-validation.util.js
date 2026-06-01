@@ -69,8 +69,8 @@ function validateDocumentItems(
       return manualNameMinLengthMessage || 'La descripcion manual debe tener al menos 3 caracteres';
     }
 
-    if (hasManualName && !hasMaxLength(item?.productoNombre, 150)) {
-      return manualNameMaxLengthMessage || 'La descripcion manual no puede superar los 150 caracteres';
+    if (hasManualName && !hasMaxLength(item?.productoNombre, 250)) {
+      return manualNameMaxLengthMessage || 'La descripcion manual no puede superar los 250 caracteres';
     }
 
     if (!isPositiveNumber(item?.cantidad)) {
@@ -111,7 +111,7 @@ function validateSaleInput({ clientId, descuento, montoPagado, pagos = [], fecha
     quantityMessage: 'La cantidad de cada item debe ser mayor a 0',
     priceMessage: 'El precio unitario de cada item debe ser igual o mayor a 0',
     manualNameMinLengthMessage: 'La descripcion manual debe tener al menos 3 caracteres',
-    manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 150 caracteres',
+    manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 250 caracteres',
   });
 
   if (itemsError) {
@@ -195,7 +195,7 @@ function validateBudgetInput({
     quantityMessage: 'La cantidad de cada item debe ser mayor a 0',
     priceMessage: 'El precio unitario de cada item debe ser igual o mayor a 0',
     manualNameMinLengthMessage: 'La descripcion manual debe tener al menos 3 caracteres',
-    manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 150 caracteres',
+    manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 250 caracteres',
   });
 
   if (itemsError) {
@@ -254,7 +254,7 @@ function validateProviderOrderInput({ fechaPedido, items }) {
     quantityMessage: 'La cantidad de cada item debe ser mayor a 0',
     priceMessage: 'El costo de cada item debe ser mayor o igual a 0',
     manualNameMinLengthMessage: 'La descripcion manual debe tener al menos 3 caracteres',
-    manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 150 caracteres',
+    manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 250 caracteres',
   });
 }
 
@@ -334,7 +334,7 @@ function validateCustomerOrderInput({
     quantityMessage: 'La cantidad de cada item debe ser mayor a 0',
     priceMessage: 'El precio de cada item debe ser mayor o igual a 0',
     manualNameMinLengthMessage: 'La descripcion manual debe tener al menos 3 caracteres',
-    manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 150 caracteres',
+    manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 250 caracteres',
   });
 
   if (itemsError) {

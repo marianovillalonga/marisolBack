@@ -39,6 +39,7 @@ async function run() {
   const client = await pool.connect();
 
   try {
+    await bootstrapSchema();
     await ensureMigrationsTable(client);
     const appliedMigrations = await getAppliedMigrations(client);
     const migrationFiles = fs
@@ -57,7 +58,6 @@ async function run() {
       console.log(`Applied migration: ${migrationFile}`);
     }
 
-    await bootstrapSchema();
     console.log('Schema bootstrap completed');
   } finally {
     client.release();
