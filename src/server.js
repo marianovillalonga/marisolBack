@@ -5,6 +5,9 @@ const logger = require('./utils/logger.util');
 
 const STARTUP_DB_RETRIES = Number(process.env.DB_STARTUP_RETRIES) || 6;
 const STARTUP_DB_RETRY_DELAY_MS = Number(process.env.DB_STARTUP_RETRY_DELAY_MS) || 5000;
+const STARTUP_DB_REQUIRED = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.DB_STARTUP_REQUIRED || process.env.NODE_ENV === 'production').toLowerCase(),
+);
 
 function serializeError(error) {
   if (!error) {
@@ -70,13 +73,11 @@ async function verifyDatabaseConnection() {
   await pool.query('SELECT 1');
 }
 
-async function startServer() {
-  validateRuntimeConfig();
-
+async function waitForDatabaseConnection() {
   for (let attempt = 1; attempt <= STARTUP_DB_RETRIES; attempt += 1) {
     try {
       await verifyDatabaseConnection();
-      break;
+      return;
     } catch (error) {
       const canRetry = isRetryableDatabaseStartupError(error) && attempt < STARTUP_DB_RETRIES;
 
@@ -94,10 +95,28 @@ async function startServer() {
       await sleep(STARTUP_DB_RETRY_DELAY_MS);
     }
   }
+}
+
+async function startServer() {
+  validateRuntimeConfig();
+
+  if (STARTUP_DB_REQUIRED) {
+    await waitForDatabaseConnection();
+  } else {
+    try {
+      await verifyDatabaseConnection();
+    } catch (error) {
+      logger.warn('database_startup_unavailable', {
+        db: typeof pool.getConnectionDebugInfo === 'function' ? pool.getConnectionDebugInfo() : null,
+        error: serializeError(error),
+      });
+    }
+  }
 
   const server = app.listen(PORT, () => {
     logger.info('server_started', {
       port: PORT,
+      databaseRequiredAtStartup: STARTUP_DB_REQUIRED,
     });
   });
 
