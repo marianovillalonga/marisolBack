@@ -73,6 +73,10 @@ function validateDocumentItems(
       return manualNameMaxLengthMessage || 'La descripcion manual no puede superar los 250 caracteres';
     }
 
+    if (!hasMaxLength(item?.descripcion, 500)) {
+      return 'La descripcion adicional del item no puede superar los 500 caracteres';
+    }
+
     if (!isPositiveNumber(item?.cantidad)) {
       return quantityMessage;
     }

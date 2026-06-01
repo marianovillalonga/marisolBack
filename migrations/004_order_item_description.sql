@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS pedido_detalles
+  ADD COLUMN IF NOT EXISTS descripcion TEXT;

@@ -45,6 +45,7 @@ class OrderModel {
       pedidoId: row.pedido_id,
       productoId: row.producto_id,
       productoNombre: row.producto_nombre,
+      descripcion: row.descripcion,
       cantidad,
       costoUnitario,
       subtotal: Number(row.subtotal || cantidad * costoUnitario),
@@ -84,6 +85,7 @@ class OrderModel {
         pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
         producto_id INTEGER REFERENCES productos(id) ON DELETE SET NULL,
         producto_nombre VARCHAR(250) NOT NULL,
+        descripcion TEXT,
         cantidad INTEGER NOT NULL DEFAULT 1,
         costo_unitario NUMERIC(12,2) NOT NULL DEFAULT 0,
         stock_anterior INTEGER NOT NULL DEFAULT 0,
@@ -111,6 +113,11 @@ class OrderModel {
     await pool.query(`
       ALTER TABLE pedido_detalles
       ADD COLUMN IF NOT EXISTS costo_unitario NUMERIC(12,2) NOT NULL DEFAULT 0
+    `);
+
+    await pool.query(`
+      ALTER TABLE pedido_detalles
+      ADD COLUMN IF NOT EXISTS descripcion TEXT
     `);
 
     await pool.query(`
@@ -270,6 +277,7 @@ class OrderModel {
           pedido_id,
           producto_id,
           producto_nombre,
+          descripcion,
           cantidad,
           costo_unitario,
           (cantidad * costo_unitario)::numeric(12,2) AS subtotal,
@@ -307,6 +315,7 @@ class OrderModel {
     return items.map((item) => ({
       productoId: item.productoId || null,
       productoNombre: item.productoNombre,
+      descripcion: item.descripcion || '',
       cantidad: Number(item.cantidad),
       costoUnitario: Number(item.costoUnitario),
     }));
@@ -322,14 +331,22 @@ class OrderModel {
             pedido_id,
             producto_id,
             producto_nombre,
+            descripcion,
             cantidad,
             costo_unitario,
             stock_anterior,
             stock_actual
           )
-          VALUES ($1, $2, $3, $4, $5, 0, 0)
+          VALUES ($1, $2, $3, $4, $5, $6, 0, 0)
         `,
-        [orderId, item.productoId, item.productoNombre, item.cantidad, item.costoUnitario],
+        [
+          orderId,
+          item.productoId,
+          item.productoNombre,
+          item.descripcion || null,
+          item.cantidad,
+          item.costoUnitario,
+        ],
       );
     }
   }
@@ -504,7 +521,7 @@ class OrderModel {
 
       const detailsResult = await client.query(
         `
-          SELECT producto_id, producto_nombre, cantidad, costo_unitario
+          SELECT producto_id, producto_nombre, descripcion, cantidad, costo_unitario
           FROM pedido_detalles
           WHERE pedido_id = $1
           ORDER BY id ASC
@@ -515,6 +532,7 @@ class OrderModel {
       const items = detailsResult.rows.map((item) => ({
         productoId: item.producto_id ? Number(item.producto_id) : null,
         productoNombre: item.producto_nombre,
+        descripcion: item.descripcion || '',
         cantidad: Number(item.cantidad),
         costoUnitario: Number(item.costo_unitario),
       }));
@@ -568,14 +586,24 @@ class OrderModel {
                 pedido_id,
                 producto_id,
                 producto_nombre,
+                descripcion,
                 cantidad,
                 costo_unitario,
                 stock_anterior,
                 stock_actual
               )
-              VALUES ($1, $2, $3, $4, $5, $6, $7)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             `,
-            [orderId, productId, productName, item.cantidad, item.costoUnitario, stockAnterior, stockActual],
+            [
+              orderId,
+              productId,
+              productName,
+              item.descripcion || null,
+              item.cantidad,
+              item.costoUnitario,
+              stockAnterior,
+              stockActual,
+            ],
           );
         }
 
@@ -698,14 +726,24 @@ class OrderModel {
               pedido_id,
               producto_id,
               producto_nombre,
+              descripcion,
               cantidad,
               costo_unitario,
               stock_anterior,
               stock_actual
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           `,
-          [orderId, productId, productName, item.cantidad, item.costoUnitario, stockAnterior, stockActual],
+          [
+            orderId,
+            productId,
+            productName,
+            item.descripcion || null,
+            item.cantidad,
+            item.costoUnitario,
+            stockAnterior,
+            stockActual,
+          ],
         );
       }
 
@@ -769,6 +807,7 @@ class OrderModel {
           itemSnapshots.push({
             productoId: product.id,
             productoNombre: product.nombre,
+            descripcion: item.descripcion || '',
             cantidad: Number(item.cantidad),
             costoUnitario: Number(item.costoUnitario),
           });
@@ -778,6 +817,7 @@ class OrderModel {
         itemSnapshots.push({
           productoId: null,
           productoNombre: item.productoNombre,
+          descripcion: item.descripcion || '',
           cantidad: Number(item.cantidad),
           costoUnitario: Number(item.costoUnitario),
         });
@@ -838,14 +878,22 @@ class OrderModel {
               pedido_id,
               producto_id,
               producto_nombre,
+              descripcion,
               cantidad,
               costo_unitario,
               stock_anterior,
               stock_actual
             )
-            VALUES ($1, $2, $3, $4, $5, 0, 0)
+            VALUES ($1, $2, $3, $4, $5, $6, 0, 0)
           `,
-          [orderId, item.productoId, item.productoNombre, item.cantidad, item.costoUnitario],
+          [
+            orderId,
+            item.productoId,
+            item.productoNombre,
+            item.descripcion || null,
+            item.cantidad,
+            item.costoUnitario,
+          ],
         );
       }
 
@@ -940,7 +988,7 @@ class OrderModel {
       if (nextEstado === 'entregado' && !ventaId) {
         const detailsResult = await dbClient.query(
           `
-            SELECT producto_id, producto_nombre, cantidad, costo_unitario
+            SELECT producto_id, producto_nombre, descripcion, cantidad, costo_unitario
             FROM pedido_detalles
             WHERE pedido_id = $1
             ORDER BY id ASC
@@ -951,6 +999,7 @@ class OrderModel {
         const items = detailsResult.rows.map((item) => ({
           productoId: item.producto_id ? Number(item.producto_id) : null,
           productoNombre: item.producto_nombre,
+          descripcion: item.descripcion || '',
           cantidad: Number(item.cantidad),
           precioUnitario: Number(item.costo_unitario),
         }));

@@ -62,6 +62,7 @@ async function createOrder(req, res, next) {
       items: req.body.items.map((item) => ({
         productoId: item.productoId ? Number(item.productoId) : null,
         productoNombre: item.productoNombre?.trim?.() || '',
+        descripcion: item.descripcion?.trim?.() || '',
         cantidad: Number(item.cantidad),
         costoUnitario: Number(item.costoUnitario),
       })),
@@ -132,6 +133,7 @@ async function saveDraftOrder(req, res, next) {
       items: req.body.items.map((item) => ({
         productoId: item.productoId ? Number(item.productoId) : null,
         productoNombre: item.productoNombre?.trim?.() || '',
+        descripcion: item.descripcion?.trim?.() || '',
         cantidad: Number(item.cantidad),
         costoUnitario: Number(item.costoUnitario),
       })),
