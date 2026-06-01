@@ -83,7 +83,7 @@ class OrderModel {
         id SERIAL PRIMARY KEY,
         pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
         producto_id INTEGER REFERENCES productos(id) ON DELETE SET NULL,
-        producto_nombre VARCHAR(150) NOT NULL,
+        producto_nombre VARCHAR(250) NOT NULL,
         cantidad INTEGER NOT NULL DEFAULT 1,
         costo_unitario NUMERIC(12,2) NOT NULL DEFAULT 0,
         stock_anterior INTEGER NOT NULL DEFAULT 0,
@@ -111,6 +111,11 @@ class OrderModel {
     await pool.query(`
       ALTER TABLE pedido_detalles
       ADD COLUMN IF NOT EXISTS costo_unitario NUMERIC(12,2) NOT NULL DEFAULT 0
+    `);
+
+    await pool.query(`
+      ALTER TABLE pedido_detalles
+      ALTER COLUMN producto_nombre TYPE VARCHAR(250)
     `);
 
     await pool.query(`
