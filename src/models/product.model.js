@@ -116,7 +116,14 @@ class ProductModel {
         fecha_actualizacion
       FROM productos
       ${filtersQuery}
-      ORDER BY id ASC
+      ORDER BY
+        CASE
+          WHEN stock_minimo > 0 AND cantidad <= stock_minimo * 0.3 THEN 0
+          WHEN stock_minimo > 0 AND cantidad <= stock_minimo THEN 1
+          ELSE 2
+        END ASC,
+        LOWER(nombre) ASC,
+        id ASC
       LIMIT $4
       OFFSET $5
     `;
