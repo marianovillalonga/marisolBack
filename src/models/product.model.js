@@ -81,6 +81,7 @@ class ProductModel {
     const normalizedSearch = `%${search.trim().toLowerCase()}%`;
     const normalizedCategory = category.trim().toLowerCase();
     const normalizedSubcategory = subcategory.trim().toLowerCase();
+    const isBarcodeLikeSearch = /^\d{8,}$/.test(String(search).replace(/\D/g, ''));
     const filtersQuery = `
       WHERE
         (
@@ -131,10 +132,28 @@ class ProductModel {
         [normalizedSearch, normalizedCategory, normalizedSubcategory],
       ),
     ]);
+    const total = Number(countResult.rows[0]?.total || 0);
+
+    if (isBarcodeLikeSearch) {
+      console.info('[barcode][products:model] sql lookup', {
+        rawSearch: search,
+        normalizedSearch,
+        category: normalizedCategory,
+        subcategory: normalizedSubcategory,
+        limit: pagination.limit,
+        offset: pagination.offset,
+        returnedRows: rows.length,
+        total,
+        matches: rows.map((product) => ({
+          id: product.id,
+          codigoBarras: product.codigo_barras,
+        })),
+      });
+    }
 
     return {
       products: rows.map((product) => this.mapProduct(product)),
-      total: Number(countResult.rows[0]?.total || 0),
+      total,
     };
   }
 

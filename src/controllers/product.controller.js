@@ -58,8 +58,20 @@ function normalizeBarcodeInput(codigoBarras) {
 async function listProducts(req, res, next) {
   try {
     const pagination = parsePaginationParams(req.query);
+    const search = req.query.search || '';
+
+    if (/^\d{8,}$/.test(sanitizeBarcode(search))) {
+      console.info('[barcode][products:controller] received search', {
+        rawSearch: search,
+        sanitizedSearch: sanitizeBarcode(search),
+        page: pagination.page,
+        limit: pagination.limit,
+        offset: pagination.offset,
+      });
+    }
+
     const result = await productModel.listProducts(
-      req.query.search || '',
+      search,
       req.query.category || '',
       req.query.subcategory || '',
       pagination,
@@ -120,6 +132,14 @@ async function createProduct(req, res, next) {
       );
     }
 
+    if (req.body.codigoBarras) {
+      console.info('[barcode][products:controller] create normalized', {
+        rawBarcode: req.body.codigoBarras,
+        sanitizedBarcode: sanitizeBarcode(req.body.codigoBarras),
+        normalizedBarcode,
+      });
+    }
+
     const product = await productModel.createProduct({
       nombre: req.body.nombre.trim(),
       categoria: req.body.categoria.trim(),
@@ -177,6 +197,15 @@ async function updateProduct(req, res, next) {
       return res.status(400).json(
         buildMessageResponse('El codigo de barras debe ser un EAN-13 valido de 13 digitos'),
       );
+    }
+
+    if (req.body.codigoBarras) {
+      console.info('[barcode][products:controller] update normalized', {
+        productId: Number(req.params.id),
+        rawBarcode: req.body.codigoBarras,
+        sanitizedBarcode: sanitizeBarcode(req.body.codigoBarras),
+        normalizedBarcode,
+      });
     }
 
     const product = await productModel.updateProduct(Number(req.params.id), {
