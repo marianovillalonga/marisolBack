@@ -1,7 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { distributeAmountAcrossItems, groupSaleItemsByProduct } = require('./sale.util');
+const {
+  distributeAmountAcrossItems,
+  groupSaleItemsByProduct,
+  roundAmountToHundreds,
+} = require('./sale.util');
 
 test('groupSaleItemsByProduct acumula cantidades del mismo producto', () => {
   const grouped = groupSaleItemsByProduct([
@@ -21,4 +25,15 @@ test('distributeAmountAcrossItems conserva el total distribuido', () => {
   const total = distributed.reduce((accumulator, value) => accumulator + value, 0);
 
   assert.equal(total, 10);
+});
+
+test('roundAmountToHundreds redondea el precio final de venta a centenas', () => {
+  assert.equal(roundAmountToHundreds(1001), 1000);
+  assert.equal(roundAmountToHundreds(1049), 1000);
+  assert.equal(roundAmountToHundreds(1050), 1000);
+  assert.equal(roundAmountToHundreds(1051), 1100);
+  assert.equal(roundAmountToHundreds(1099), 1100);
+  assert.equal(roundAmountToHundreds(1460), 1500);
+  assert.equal(roundAmountToHundreds(1499), 1500);
+  assert.equal(roundAmountToHundreds(1500), 1500);
 });

@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const {
   distributeAmountAcrossItems,
   groupSaleItemsByProduct,
+  roundAmountToHundreds,
   roundToTwo,
 } = require('../utils/sale.util');
 
@@ -391,10 +392,6 @@ class SaleModel {
 
     totalPaymentBase = roundToTwo(totalPaymentBase);
 
-    if (totalPaymentBase - discountedSubtotal > 0.01) {
-      return { error: 'INVALID_PAYMENT_SPLIT' };
-    }
-
     const ajusteMetodoPago = roundToTwo(montoPagado - totalPaymentBase);
     const singlePaymentRule =
       normalizedPayments.length === 1 ? sellerConfig[normalizedPayments[0].metodo] : null;
@@ -404,10 +401,15 @@ class SaleModel {
         : null;
     const ajusteMetodoPagoPorcentaje =
       normalizedPayments.length === 1 ? Number(singlePaymentRule?.porcentaje || 0) : 0;
-    const total = roundToTwo(discountedSubtotal + ajusteMetodoPago);
-    const deudaPendiente = Math.max(total - montoPagado, 0);
+    const total = roundAmountToHundreds(roundToTwo(discountedSubtotal + ajusteMetodoPago));
+
+    if (montoPagado - total > 0.01) {
+      return { error: 'INVALID_PAYMENT_SPLIT' };
+    }
+
+    const deudaPendiente = roundToTwo(Math.max(total - montoPagado, 0));
     const itemAdjustments = distributeAmountAcrossItems(
-      ajusteMetodoPago - descuento,
+      total - subtotal,
       itemSnapshots.map((item) => item.subtotal),
     );
     const itemNetTotals = itemSnapshots.map((item, index) =>

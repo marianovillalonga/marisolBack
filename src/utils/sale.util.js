@@ -2,6 +2,24 @@ function roundToTwo(value) {
   return Number(Number(value).toFixed(2));
 }
 
+function roundAmountToHundreds(value) {
+  const safeValue = Number(value);
+
+  if (!Number.isFinite(safeValue)) {
+    return 0;
+  }
+
+  const sign = safeValue < 0 ? -1 : 1;
+  const normalizedValue = Math.round(Math.abs(safeValue));
+  const lastTwoDigits = normalizedValue % 100;
+  const roundedValue =
+    lastTwoDigits <= 50
+      ? normalizedValue - lastTwoDigits
+      : normalizedValue + (100 - lastTwoDigits);
+
+  return roundedValue * sign;
+}
+
 function distributeAmountAcrossItems(amount, bases) {
   const safeAmount = roundToTwo(amount);
   const totalBase = bases.reduce((accumulator, value) => accumulator + value, 0);
@@ -45,5 +63,6 @@ function groupSaleItemsByProduct(items) {
 module.exports = {
   distributeAmountAcrossItems,
   groupSaleItemsByProduct,
+  roundAmountToHundreds,
   roundToTwo,
 };

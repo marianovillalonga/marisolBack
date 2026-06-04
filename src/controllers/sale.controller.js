@@ -119,7 +119,7 @@ async function createSale(req, res, next) {
 
     if (result.error === 'INVALID_PAYMENT_SPLIT') {
       return res.status(400).json(
-        buildMessageResponse('Los pagos informados superan el subtotal cubierto de la venta'),
+        buildMessageResponse('Los pagos informados superan el total de la venta'),
       );
     }
 
@@ -252,7 +252,7 @@ async function confirmDraftSale(req, res, next) {
 
     if (result.error === 'INVALID_PAYMENT_SPLIT') {
       return res.status(400).json(
-        buildMessageResponse('Los pagos informados superan el subtotal cubierto de la venta'),
+        buildMessageResponse('Los pagos informados superan el total de la venta'),
       );
     }
 
