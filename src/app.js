@@ -29,6 +29,7 @@ app.use(
       callback(new Error(`Origen no permitido por CORS: ${origin}`));
     },
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Auth-Token', 'X-Request-Id'],
   }),
 );
 app.use(express.json({ limit: '15mb' }));

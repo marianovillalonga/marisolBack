@@ -6,11 +6,14 @@ const userModel = require('../models/user.model');
 
 async function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
+  const xAuthToken = req.headers['x-auth-token'];
   const cookieToken = getAuthTokenFromCookies(req.headers.cookie);
   const token =
     authHeader && authHeader.startsWith('Bearer ')
       ? authHeader.split(' ')[1]
-      : cookieToken;
+      : typeof xAuthToken === 'string' && xAuthToken.trim()
+        ? xAuthToken.trim()
+        : cookieToken;
 
   if (!token) {
     return res.status(401).json(buildMessageResponse('Token no enviado'));

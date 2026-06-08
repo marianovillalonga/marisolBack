@@ -68,3 +68,24 @@ test('buildRequestLogMeta incluye contexto operativo sin filtrar secretos', () =
     referer: 'http://localhost:3000/pedidos',
   });
 });
+
+test('buildRequestLogMeta detecta auth por header sin cookie', () => {
+  const meta = buildRequestLogMeta(
+    {
+      requestId: 'req-456',
+      method: 'GET',
+      originalUrl: '/api/clients',
+      ip: '127.0.0.1',
+      headers: {
+        authorization: 'Bearer token',
+        'user-agent': 'Browser',
+      },
+    },
+    {
+      statusCode: 200,
+    },
+    12.3,
+  );
+
+  assert.equal(meta.authPresent, true);
+});

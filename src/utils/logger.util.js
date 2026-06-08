@@ -20,8 +20,10 @@ const SENSITIVE_KEYS = new Set([
   'passwordhash',
   'token',
   'authorization',
+  'authtoken',
   'cookie',
   'set-cookie',
+  'xauthtoken',
   'secret',
   'apikey',
   'api_key',
@@ -149,7 +151,9 @@ function buildRequestLogMeta(req, res, durationMs) {
     durationMs,
     ip: req.ip,
     userId: req.user?.id || null,
-    authPresent: Boolean(req.headers.cookie),
+    authPresent: Boolean(
+      req.headers.cookie || req.headers.authorization || req.headers['x-auth-token'],
+    ),
     userAgent: req.headers['user-agent'] || null,
     referer: req.headers.referer || null,
   };
