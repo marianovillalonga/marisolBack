@@ -203,6 +203,33 @@ test('login bloquea usuarios legacy que requieren reset de password', async () =
   assert.match(res.body.message, /restablecer la password/i);
 });
 
+test('login exitoso devuelve token para clientes sin cookie first-party', async () => {
+  const user = {
+    id: 10,
+    email: 'admin@example.com',
+    role: 'admin',
+  };
+  const controller = loadAuthController({
+    userModel: {
+      validateCredentials: async () => ({ user }),
+    },
+  });
+  const req = {
+    body: {
+      email: 'admin@example.com',
+      password: 'secret',
+    },
+  };
+  const res = createMockResponse();
+
+  await controller.login(req, res, () => {});
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.authCookie, 'signed-token');
+  assert.equal(res.body.token, 'signed-token');
+  assert.equal(res.body.user.email, user.email);
+});
+
 test('requestPasswordReset no enumera usuarios inexistentes', async () => {
   const controller = loadAuthController();
   const req = {

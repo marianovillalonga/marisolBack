@@ -796,3 +796,6 @@
 {"timestamp":"2026-06-01T22:33:56.090Z","level":"info","message":"email_sent","requestId":"test-request","provider":"resend","emailId":"reset_email_id","to":"test@example.com","subject":"Recuperar contraseña","from":"noreply@mariovillalonga.website"}
 {"timestamp":"2026-06-01T22:33:56.167Z","level":"info","message":"email_preview_saved","requestId":null,"provider":"file","previewFileName":"1780353236167-bbaf6ece-6274-4070-a247-dd453aea7601.json","to":"test@example.com","subject":"Asunto"}
 {"timestamp":"2026-06-01T22:33:56.553Z","level":"info","message":"server_started","port":4000,"databaseRequiredAtStartup":false}
+{"timestamp":"2026-06-08T18:05:26.024Z","level":"info","message":"email_sent","requestId":"test-request","provider":"resend","emailId":"re_email_id","to":"test@example.com","subject":"Asunto","from":"noreply@mariovillalonga.website"}
+{"timestamp":"2026-06-08T18:05:26.028Z","level":"info","message":"email_sent","requestId":"test-request","provider":"resend","emailId":"reset_email_id","to":"test@example.com","subject":"Recuperar contraseña","from":"noreply@mariovillalonga.website"}
+{"timestamp":"2026-06-08T18:05:26.111Z","level":"info","message":"email_preview_saved","requestId":null,"provider":"file","previewFileName":"1780941926111-c0c1aae6-d2d5-4e1f-a39c-58facb75ac77.json","to":"test@example.com","subject":"Asunto"}
