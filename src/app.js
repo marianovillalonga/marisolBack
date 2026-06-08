@@ -14,6 +14,7 @@ const { getDependencyHealth, getLivenessHealth } = require('./services/health.se
 
 const app = express();
 app.disable('x-powered-by');
+app.disable('etag');
 
 const allowedOrigins = new Set(FRONTEND_URLS);
 
@@ -34,6 +35,10 @@ app.use(express.json({ limit: '15mb' }));
 app.use(securityHeadersMiddleware());
 app.use(requireJsonContentType);
 app.use(logger.createRequestLogger());
+app.use('/api', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 app.use('/api', apiRateLimit);
 app.use('/api', validateTrustedOriginForCookieAuth);
 
