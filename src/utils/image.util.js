@@ -7,7 +7,6 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpg',
   'image/png',
   'image/webp',
-  'image/gif',
 ]);
 const COMPRESSIBLE_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
@@ -20,7 +19,6 @@ const IMAGE_FORMAT_TO_MIME = {
   jpg: 'image/jpeg',
   png: 'image/png',
   webp: 'image/webp',
-  gif: 'image/gif',
 };
 
 function estimateBase64Size(base64Value) {
@@ -31,7 +29,7 @@ function estimateBase64Size(base64Value) {
 }
 
 function parseDataImage(imageUrl) {
-  const matches = imageUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  const matches = imageUrl.match(/^data:([a-zA-Z0-9.+/-]+);base64,(.+)$/);
 
   if (!matches) {
     return null;
@@ -104,7 +102,7 @@ function validateImageUrl(imageUrl) {
     }
 
     if (!ALLOWED_IMAGE_MIME_TYPES.has(parsedImage.mimeType)) {
-      return 'La imagen debe ser JPG, PNG, WEBP o GIF';
+      return 'La imagen debe ser JPG, JPEG, PNG o WEBP';
     }
 
     return null;
@@ -205,6 +203,10 @@ async function normalizeImageUrl(imageUrl) {
   }
 
   const parsedImage = parseDataImage(imageUrl);
+  console.log('originalName:', 'imageUrl');
+  console.log('mimeType:', parsedImage.mimeType);
+  console.log('size:', estimateBase64Size(parsedImage.base64Value));
+
   const detectedMimeType = await detectImageMimeType(parsedImage.base64Value).catch(() => null);
 
   if (!detectedMimeType) {

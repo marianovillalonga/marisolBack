@@ -1,13 +1,58 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const sharp = require('sharp');
 
 const { MAX_IMAGE_BYTES, normalizeImageUrl, validateImageUrl } = require('./image.util');
 
 const VALID_PNG_BASE64 =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2pH8sAAAAASUVORK5CYII=';
 
+async function buildImageDataUrl(format, mimeType = `image/${format}`) {
+  const buffer = await sharp({
+    create: {
+      width: 8,
+      height: 8,
+      channels: 4,
+      background: { r: 220, g: 80, b: 40, alpha: 1 },
+    },
+  })
+    .toFormat(format)
+    .toBuffer();
+
+  return `data:${mimeType};base64,${buffer.toString('base64')}`;
+}
+
 test('validateImageUrl permite imagen base64 valida', () => {
   assert.equal(validateImageUrl(VALID_PNG_BASE64), null);
+});
+
+test('normalizeImageUrl permite PNG valido', async () => {
+  const imageUrl = await buildImageDataUrl('png');
+  const result = await normalizeImageUrl(imageUrl);
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.imageUrl, imageUrl);
+});
+
+test('normalizeImageUrl permite WEBP valido', async () => {
+  const imageUrl = await buildImageDataUrl('webp');
+  const result = await normalizeImageUrl(imageUrl);
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.imageUrl, imageUrl);
+});
+
+test('normalizeImageUrl permite JPG/JPEG valido', async () => {
+  const jpegImageUrl = await buildImageDataUrl('jpeg', 'image/jpeg');
+  const jpgImageUrl = jpegImageUrl.replace('data:image/jpeg', 'data:image/jpg');
+
+  const jpegResult = await normalizeImageUrl(jpegImageUrl);
+  const jpgResult = await normalizeImageUrl(jpgImageUrl);
+
+  assert.equal(jpegResult.error, undefined);
+  assert.equal(jpegResult.imageUrl, jpegImageUrl);
+  assert.equal(jpgResult.error, undefined);
+  assert.equal(jpgResult.imageUrl, jpgImageUrl);
 });
 
 test('validateImageUrl rechaza rutas con path traversal', () => {
@@ -20,8 +65,14 @@ test('validateImageUrl rechaza rutas con path traversal', () => {
 test('validateImageUrl rechaza MIME invalido', () => {
   assert.equal(
     validateImageUrl('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='),
-    'La imagen debe ser JPG, PNG, WEBP o GIF',
+    'La imagen debe ser JPG, JPEG, PNG o WEBP',
   );
+});
+
+test('validateImageUrl rechaza PDF como formato no permitido', () => {
+  const pdfDataUrl = `data:application/pdf;base64,${Buffer.from('%PDF-1.4').toString('base64')}`;
+
+  assert.equal(validateImageUrl(pdfDataUrl), 'La imagen debe ser JPG, JPEG, PNG o WEBP');
 });
 
 test('validateImageUrl rechaza credenciales embebidas en URL', () => {
