@@ -261,6 +261,7 @@ class CategoryModel {
             s.id,
             s.categoria_id,
             s.nombre,
+            s.codigo,
             c.nombre AS categoria_nombre
           FROM subcategorias s
           INNER JOIN categorias c ON c.id = s.categoria_id
@@ -303,7 +304,7 @@ class CategoryModel {
         return { error: 'DUPLICATE' };
       }
 
-      let codigo = subcategory.codigo;
+      let codigo = subcategory.codigo || (await this.getNextSubcategoryCode(categoriaId, client));
 
       if (Number(categoriaId) !== Number(subcategory.categoria_id)) {
         codigo = await this.getNextSubcategoryCode(categoriaId, client);
