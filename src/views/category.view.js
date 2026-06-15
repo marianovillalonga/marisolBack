@@ -13,7 +13,24 @@ function buildCategoryResponse(category, message) {
   };
 }
 
+function buildSubcategoriesResponse(subcategories) {
+  return {
+    ok: true,
+    subcategories,
+  };
+}
+
+function buildSubcategoryResponse(subcategory, message) {
+  return {
+    ok: true,
+    message,
+    subcategory,
+  };
+}
+
 module.exports = {
   buildCategoriesResponse,
   buildCategoryResponse,
+  buildSubcategoriesResponse,
+  buildSubcategoryResponse,
 };

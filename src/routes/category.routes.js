@@ -8,7 +8,30 @@ const { validateNumericParams } = require('../middlewares/request-validation.mid
 const router = Router();
 
 router.get('/', authMiddleware, roleMiddleware(['admin', 'vendedor']), categoryController.listCategories);
+router.get('/subcategories', authMiddleware, roleMiddleware(['admin', 'vendedor']), categoryController.listSubcategories);
 router.post('/', authMiddleware, roleMiddleware(['admin']), categoryController.createCategory);
+router.post('/subcategories', authMiddleware, roleMiddleware(['admin']), categoryController.createSubcategory);
+router.put(
+  '/subcategories/:id',
+  authMiddleware,
+  validateNumericParams(['id']),
+  roleMiddleware(['admin']),
+  categoryController.updateSubcategory,
+);
+router.delete(
+  '/subcategories/:id',
+  authMiddleware,
+  validateNumericParams(['id']),
+  roleMiddleware(['admin']),
+  categoryController.deleteSubcategory,
+);
+router.put(
+  '/:id',
+  authMiddleware,
+  validateNumericParams(['id']),
+  roleMiddleware(['admin']),
+  categoryController.updateCategory,
+);
 router.delete(
   '/:id',
   authMiddleware,

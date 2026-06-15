@@ -17,6 +17,11 @@ class CategoryModel {
     `);
 
     await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_categorias_nombre_lower_unique
+      ON categorias (LOWER(nombre))
+    `);
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS subcategorias (
         id SERIAL PRIMARY KEY,
         categoria_id INTEGER NOT NULL REFERENCES categorias(id) ON DELETE CASCADE,
@@ -62,7 +67,20 @@ class CategoryModel {
         COALESCE(
           ARRAY_AGG(s.nombre ORDER BY s.nombre) FILTER (WHERE s.nombre IS NOT NULL),
           ARRAY[]::VARCHAR[]
-        ) AS subcategorias
+        ) AS subcategorias,
+        COALESCE(
+          JSON_AGG(
+            JSON_BUILD_OBJECT(
+              'id', s.id,
+              'categoriaId', s.categoria_id,
+              'nombre', s.nombre,
+              'codigo', s.codigo,
+              'categoriaNombre', c.nombre
+            )
+            ORDER BY s.nombre
+          ) FILTER (WHERE s.id IS NOT NULL),
+          '[]'::json
+        ) AS "subcategoriasDetalle"
       FROM categorias c
       LEFT JOIN subcategorias s ON s.categoria_id = c.id
       GROUP BY c.id, c.nombre, c.codigo
@@ -93,6 +111,58 @@ class CategoryModel {
     return { category: rows[0], created: true };
   }
 
+  async updateCategory(id, nombre) {
+    const normalizedName = nombre.trim();
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const categoryResult = await client.query(
+        'SELECT id, nombre, codigo FROM categorias WHERE id = $1 LIMIT 1 FOR UPDATE',
+        [id],
+      );
+      const category = categoryResult.rows[0];
+
+      if (!category) {
+        await client.query('ROLLBACK');
+        return { error: 'NOT_FOUND' };
+      }
+
+      const duplicateResult = await client.query(
+        'SELECT id FROM categorias WHERE id <> $1 AND LOWER(nombre) = LOWER($2) LIMIT 1',
+        [id, normalizedName],
+      );
+
+      if (duplicateResult.rows[0]) {
+        await client.query('ROLLBACK');
+        return { error: 'DUPLICATE' };
+      }
+
+      const { rows } = await client.query(
+        'UPDATE categorias SET nombre = $2 WHERE id = $1 RETURNING id, nombre, codigo',
+        [id, normalizedName],
+      );
+
+      await client.query(
+        `
+          UPDATE productos
+          SET categoria = $2
+          WHERE LOWER(COALESCE(categoria, '')) = LOWER($1)
+        `,
+        [category.nombre, normalizedName],
+      );
+
+      await client.query('COMMIT');
+      return { category: rows[0] };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async deleteCategory(id) {
     const categoryResult = await pool.query(
       'SELECT id, nombre, codigo FROM categorias WHERE id = $1 LIMIT 1',
@@ -120,6 +190,190 @@ class CategoryModel {
 
     await pool.query('DELETE FROM categorias WHERE id = $1', [id]);
 
+    return { deleted: true };
+  }
+
+  async listSubcategories() {
+    const { rows } = await pool.query(`
+      SELECT
+        s.id,
+        s.categoria_id AS "categoriaId",
+        s.nombre,
+        s.codigo,
+        c.nombre AS "categoriaNombre"
+      FROM subcategorias s
+      INNER JOIN categorias c ON c.id = s.categoria_id
+      ORDER BY c.nombre ASC, s.nombre ASC
+    `);
+
+    return rows;
+  }
+
+  async createSubcategory(categoriaId, nombre) {
+    const normalizedName = nombre.trim();
+
+    const categoryResult = await pool.query(
+      'SELECT id FROM categorias WHERE id = $1 LIMIT 1',
+      [categoriaId],
+    );
+
+    if (!categoryResult.rows[0]) {
+      return { error: 'CATEGORY_NOT_FOUND' };
+    }
+
+    const existing = await pool.query(
+      `
+        SELECT id, categoria_id AS "categoriaId", nombre, codigo
+        FROM subcategorias
+        WHERE categoria_id = $1 AND LOWER(nombre) = LOWER($2)
+        LIMIT 1
+      `,
+      [categoriaId, normalizedName],
+    );
+
+    if (existing.rows[0]) {
+      return { error: 'DUPLICATE' };
+    }
+
+    const nextCode = await this.getNextSubcategoryCode(categoriaId);
+    const { rows } = await pool.query(
+      `
+        INSERT INTO subcategorias (categoria_id, nombre, codigo)
+        VALUES ($1, $2, $3)
+        RETURNING id, categoria_id AS "categoriaId", nombre, codigo
+      `,
+      [categoriaId, normalizedName, nextCode],
+    );
+
+    return { subcategory: rows[0], created: true };
+  }
+
+  async updateSubcategory(id, { categoriaId, nombre }) {
+    const normalizedName = nombre.trim();
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const subcategoryResult = await client.query(
+        `
+          SELECT
+            s.id,
+            s.categoria_id,
+            s.nombre,
+            c.nombre AS categoria_nombre
+          FROM subcategorias s
+          INNER JOIN categorias c ON c.id = s.categoria_id
+          WHERE s.id = $1
+          LIMIT 1
+          FOR UPDATE
+        `,
+        [id],
+      );
+      const subcategory = subcategoryResult.rows[0];
+
+      if (!subcategory) {
+        await client.query('ROLLBACK');
+        return { error: 'NOT_FOUND' };
+      }
+
+      const categoryResult = await client.query(
+        'SELECT id, nombre FROM categorias WHERE id = $1 LIMIT 1',
+        [categoriaId],
+      );
+      const category = categoryResult.rows[0];
+
+      if (!category) {
+        await client.query('ROLLBACK');
+        return { error: 'CATEGORY_NOT_FOUND' };
+      }
+
+      const duplicateResult = await client.query(
+        `
+          SELECT id
+          FROM subcategorias
+          WHERE id <> $1 AND categoria_id = $2 AND LOWER(nombre) = LOWER($3)
+          LIMIT 1
+        `,
+        [id, categoriaId, normalizedName],
+      );
+
+      if (duplicateResult.rows[0]) {
+        await client.query('ROLLBACK');
+        return { error: 'DUPLICATE' };
+      }
+
+      let codigo = subcategory.codigo;
+
+      if (Number(categoriaId) !== Number(subcategory.categoria_id)) {
+        codigo = await this.getNextSubcategoryCode(categoriaId, client);
+      }
+
+      const { rows } = await client.query(
+        `
+          UPDATE subcategorias
+          SET categoria_id = $2, nombre = $3, codigo = $4
+          WHERE id = $1
+          RETURNING id, categoria_id AS "categoriaId", nombre, codigo
+        `,
+        [id, categoriaId, normalizedName, codigo],
+      );
+
+      await client.query(
+        `
+          UPDATE productos
+          SET categoria = $3, subcategoria = $4
+          WHERE LOWER(COALESCE(categoria, '')) = LOWER($1)
+            AND LOWER(COALESCE(subcategoria, '')) = LOWER($2)
+        `,
+        [subcategory.categoria_nombre, subcategory.nombre, category.nombre, normalizedName],
+      );
+
+      await client.query('COMMIT');
+      return { subcategory: rows[0] };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteSubcategory(id) {
+    const subcategoryResult = await pool.query(
+      `
+        SELECT
+          s.id,
+          s.nombre,
+          c.nombre AS categoria_nombre
+        FROM subcategorias s
+        INNER JOIN categorias c ON c.id = s.categoria_id
+        WHERE s.id = $1
+        LIMIT 1
+      `,
+      [id],
+    );
+    const subcategory = subcategoryResult.rows[0];
+
+    if (!subcategory) {
+      return { error: 'NOT_FOUND' };
+    }
+
+    const inUseResult = await pool.query(
+      `
+        SELECT COUNT(*)::int AS total
+        FROM productos
+        WHERE LOWER(COALESCE(categoria, '')) = LOWER($1)
+          AND LOWER(COALESCE(subcategoria, '')) = LOWER($2)
+      `,
+      [subcategory.categoria_nombre, subcategory.nombre],
+    );
+
+    if (inUseResult.rows[0]?.total > 0) {
+      return { error: 'IN_USE' };
+    }
+
+    await pool.query('DELETE FROM subcategorias WHERE id = $1', [id]);
     return { deleted: true };
   }
 
