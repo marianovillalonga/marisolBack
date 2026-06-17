@@ -20,6 +20,7 @@ class OrderModel {
       fechaPedido: row.fecha_pedido,
       fechaEvento: row.fecha_evento,
       fechaEntrega: row.fecha_entrega,
+      clienteId: row.cliente_id,
       clienteNombre: row.cliente_nombre,
       clienteTelefono: row.cliente_telefono,
       agasajadoNombre: row.agasajado_nombre,
@@ -64,6 +65,7 @@ class OrderModel {
         fecha_pedido TIMESTAMP NOT NULL DEFAULT NOW(),
         fecha_evento TIMESTAMP,
         fecha_entrega TIMESTAMP,
+        cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
         cliente_nombre VARCHAR(150),
         cliente_telefono VARCHAR(50),
         agasajado_nombre VARCHAR(150),
@@ -99,6 +101,7 @@ class OrderModel {
       ADD COLUMN IF NOT EXISTS estado VARCHAR(20) NOT NULL DEFAULT 'registrado',
       ADD COLUMN IF NOT EXISTS fecha_evento TIMESTAMP,
       ADD COLUMN IF NOT EXISTS fecha_entrega TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
       ADD COLUMN IF NOT EXISTS cliente_nombre VARCHAR(150),
       ADD COLUMN IF NOT EXISTS cliente_telefono VARCHAR(50),
       ADD COLUMN IF NOT EXISTS agasajado_nombre VARCHAR(150),
@@ -187,6 +190,7 @@ class OrderModel {
         p.fecha_pedido,
         p.fecha_evento,
         p.fecha_entrega,
+        p.cliente_id,
         p.cliente_nombre,
         p.cliente_telefono,
         p.agasajado_nombre,
@@ -354,6 +358,19 @@ class OrderModel {
     return userResult.rows[0] ? { ok: true } : { error: 'USER_NOT_FOUND' };
   }
 
+  async resolveExistingClientId(client, clientId) {
+    if (!clientId) {
+      return null;
+    }
+
+    const clientResult = await client.query(
+      'SELECT id FROM clientes WHERE id = $1 LIMIT 1',
+      [clientId],
+    );
+
+    return clientResult.rows[0] ? Number(clientResult.rows[0].id) : null;
+  }
+
   buildOrderItemSnapshots(items) {
     return items.map((item) => ({
       productoId: item.productoId || null,
@@ -406,6 +423,10 @@ class OrderModel {
         return userStatus;
       }
 
+      const resolvedClientId = payload.tipo === 'cliente' && payload.clientId
+        ? await this.resolveExistingClientId(client, Number(payload.clientId))
+        : null;
+
       if (payload.orderId) {
         const existingOrderResult = await client.query(
           'SELECT id, estado FROM pedidos WHERE id = $1 LIMIT 1 FOR UPDATE',
@@ -445,16 +466,17 @@ class OrderModel {
               fecha_pedido = $4,
               fecha_evento = $5,
               fecha_entrega = $6,
-              cliente_nombre = $7,
-              cliente_telefono = $8,
-              agasajado_nombre = $9,
-              edad_agasajado = $10,
-              tematica = $11,
-              monto_entregado = $12,
-              saldo_pendiente = $13,
+              cliente_id = $7,
+              cliente_nombre = $8,
+              cliente_telefono = $9,
+              agasajado_nombre = $10,
+              edad_agasajado = $11,
+              tematica = $12,
+              monto_entregado = $13,
+              saldo_pendiente = $14,
               metodo_pago = NULL,
               venta_id = NULL,
-              notas = $14
+              notas = $15
             WHERE id = $1
           `,
           [
@@ -464,6 +486,7 @@ class OrderModel {
             payload.fechaPedido,
             payload.tipo === 'cliente' ? payload.fechaEvento : null,
             payload.tipo === 'cliente' ? payload.fechaEntrega : null,
+            resolvedClientId,
             payload.tipo === 'cliente' ? payload.clienteNombre || null : null,
             payload.tipo === 'cliente' ? payload.clienteTelefono || null : null,
             payload.tipo === 'cliente' ? payload.agasajadoNombre || null : null,
@@ -484,6 +507,7 @@ class OrderModel {
               fecha_pedido,
               fecha_evento,
               fecha_entrega,
+              cliente_id,
               cliente_nombre,
               cliente_telefono,
               agasajado_nombre,
@@ -493,7 +517,7 @@ class OrderModel {
               saldo_pendiente,
               notas
             )
-            VALUES ($1, $2, 'en_progreso', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            VALUES ($1, $2, 'en_progreso', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             RETURNING id
           `,
           [
@@ -502,6 +526,7 @@ class OrderModel {
             payload.fechaPedido,
             payload.tipo === 'cliente' ? payload.fechaEvento : null,
             payload.tipo === 'cliente' ? payload.fechaEntrega : null,
+            resolvedClientId,
             payload.tipo === 'cliente' ? payload.clienteNombre || null : null,
             payload.tipo === 'cliente' ? payload.clienteTelefono || null : null,
             payload.tipo === 'cliente' ? payload.agasajadoNombre || null : null,
@@ -805,6 +830,7 @@ class OrderModel {
     fechaPedido,
     fechaEvento,
     fechaEntrega,
+    clientId,
     clienteNombre,
     clienteTelefono,
     agasajadoNombre,
@@ -825,6 +851,10 @@ class OrderModel {
         await client.query('ROLLBACK');
         return userStatus;
       }
+
+      const resolvedClientId = clientId
+        ? await this.resolveExistingClientId(client, Number(clientId))
+        : null;
 
       const snapshotResult = await this.buildCustomerItemSnapshots(client, items);
 
@@ -853,6 +883,7 @@ class OrderModel {
             fecha_pedido,
             fecha_evento,
             fecha_entrega,
+            cliente_id,
             cliente_nombre,
             cliente_telefono,
             agasajado_nombre,
@@ -862,7 +893,7 @@ class OrderModel {
             saldo_pendiente,
             notas
           )
-          VALUES ($1, 'cliente', 'pendiente', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          VALUES ($1, 'cliente', 'pendiente', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
           RETURNING id
         `,
         [
@@ -870,6 +901,7 @@ class OrderModel {
           fechaPedido,
           fechaEvento,
           fechaEntrega,
+          resolvedClientId,
           clienteNombre || null,
           clienteTelefono || null,
           agasajadoNombre || null,
@@ -925,6 +957,7 @@ class OrderModel {
     fechaPedido,
     fechaEvento,
     fechaEntrega,
+    clientId,
     clienteNombre,
     clienteTelefono,
     agasajadoNombre,
@@ -945,6 +978,10 @@ class OrderModel {
         await client.query('ROLLBACK');
         return userStatus;
       }
+
+      const resolvedClientId = clientId
+        ? await this.resolveExistingClientId(client, Number(clientId))
+        : null;
 
       const existingOrderResult = await client.query(
         `
@@ -999,14 +1036,15 @@ class OrderModel {
             fecha_pedido = $3,
             fecha_evento = $4,
             fecha_entrega = $5,
-            cliente_nombre = $6,
-            cliente_telefono = $7,
-            agasajado_nombre = $8,
-            edad_agasajado = $9,
-            tematica = $10,
-            monto_entregado = $11,
-            saldo_pendiente = $12,
-            notas = $13
+            cliente_id = $6,
+            cliente_nombre = $7,
+            cliente_telefono = $8,
+            agasajado_nombre = $9,
+            edad_agasajado = $10,
+            tematica = $11,
+            monto_entregado = $12,
+            saldo_pendiente = $13,
+            notas = $14
           WHERE id = $1
         `,
         [
@@ -1015,6 +1053,7 @@ class OrderModel {
           fechaPedido,
           fechaEvento,
           fechaEntrega,
+          resolvedClientId,
           clienteNombre || null,
           clienteTelefono || null,
           agasajadoNombre || null,
@@ -1135,8 +1174,12 @@ class OrderModel {
           precioUnitario: Number(item.costo_unitario),
         }));
 
+        const saleClientId = order.cliente_id
+          ? await this.resolveExistingClientId(dbClient, Number(order.cliente_id))
+          : null;
+
         const saleResult = await saleModel.createSaleWithClient(dbClient, {
-          clientId: null,
+          clientId: saleClientId,
           sellerId: userId,
           descuento: 0,
           montoPagado: montoTotal,
@@ -1182,6 +1225,76 @@ class OrderModel {
       throw error;
     } finally {
       dbClient.release();
+    }
+  }
+
+  async deleteOrder(id) {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const orderResult = await client.query(
+        `
+          SELECT id, tipo, estado, venta_id
+          FROM pedidos
+          WHERE id = $1
+          LIMIT 1
+          FOR UPDATE
+        `,
+        [id],
+      );
+
+      const order = orderResult.rows[0];
+
+      if (!order) {
+        await client.query('ROLLBACK');
+        return { error: 'NOT_FOUND' };
+      }
+
+      if (order.venta_id) {
+        await client.query('ROLLBACK');
+        return { error: 'HAS_LINKED_SALE' };
+      }
+
+      if (order.estado === 'hecho') {
+        await client.query('ROLLBACK');
+        return { error: 'INVALID_STATE' };
+      }
+
+      const detailsResult = await client.query(
+        `
+          SELECT producto_id, cantidad
+          FROM pedido_detalles
+          WHERE pedido_id = $1
+        `,
+        [id],
+      );
+
+      if (order.tipo === 'proveedor' && order.estado === 'registrado') {
+        for (const detail of detailsResult.rows) {
+          if (detail.producto_id) {
+            await client.query(
+              `
+                UPDATE productos
+                SET cantidad = GREATEST(cantidad - $2, 0)
+                WHERE id = $1
+              `,
+              [detail.producto_id, Number(detail.cantidad || 0)],
+            );
+          }
+        }
+      }
+
+      await client.query('DELETE FROM pedidos WHERE id = $1', [id]);
+
+      await client.query('COMMIT');
+      return { deleted: true, order };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
   }
 }

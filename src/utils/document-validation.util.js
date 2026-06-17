@@ -263,6 +263,7 @@ function validateProviderOrderInput({ fechaPedido, items }) {
 }
 
 function validateCustomerOrderInput({
+  clientId,
   fechaPedido,
   fechaEvento,
   fechaEntrega,
@@ -275,6 +276,12 @@ function validateCustomerOrderInput({
   notas,
   items,
 }) {
+  const clientError = validateClientId(clientId);
+
+  if (clientError) {
+    return clientError;
+  }
+
   if (!isValidDate(fechaPedido)) {
     return 'La fecha del pedido es obligatoria';
   }

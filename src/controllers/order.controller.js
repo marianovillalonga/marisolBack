@@ -46,6 +46,7 @@ async function createOrder(req, res, next) {
     const result = await orderModel.createOrder({
       userId: req.user.id,
       tipo,
+      clientId: req.body.clientId ? Number(req.body.clientId) : null,
       fechaPedido: req.body.fechaPedido,
       fechaEvento: req.body.fechaEvento || null,
       fechaEntrega: req.body.fechaEntrega || null,
@@ -74,6 +75,10 @@ async function createOrder(req, res, next) {
 
     if (result.error === 'PRODUCT_NOT_FOUND') {
       return res.status(404).json(buildMessageResponse('Uno de los productos no existe'));
+    }
+
+    if (result.error === 'CLIENT_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Cliente no encontrado'));
     }
 
     const order = await orderModel.findById(result.orderId);
@@ -117,6 +122,7 @@ async function saveDraftOrder(req, res, next) {
       orderId: req.body.orderId ? Number(req.body.orderId) : null,
       userId: req.user.id,
       tipo,
+      clientId: req.body.clientId ? Number(req.body.clientId) : null,
       fechaPedido: req.body.fechaPedido,
       fechaEvento: req.body.fechaEvento || null,
       fechaEntrega: req.body.fechaEntrega || null,
@@ -145,6 +151,10 @@ async function saveDraftOrder(req, res, next) {
 
     if (result.error === 'PRODUCT_NOT_FOUND') {
       return res.status(404).json(buildMessageResponse('Uno de los productos no existe'));
+    }
+
+    if (result.error === 'CLIENT_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Cliente no encontrado'));
     }
 
     if (result.error === 'NOT_FOUND') {
@@ -267,6 +277,10 @@ async function updateCustomerOrder(req, res, next) {
       return res.status(404).json(buildMessageResponse('Uno de los productos no existe'));
     }
 
+    if (result.error === 'CLIENT_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Cliente no encontrado'));
+    }
+
     if (result.error === 'INSUFFICIENT_STOCK') {
       return res.status(409).json(
         buildMessageResponse(
@@ -314,6 +328,7 @@ async function updatePendingCustomerOrder(req, res, next) {
     const result = await orderModel.updatePendingCustomerOrder({
       orderId: Number(req.params.id),
       userId: req.user.id,
+      clientId: req.body.clientId ? Number(req.body.clientId) : null,
       fechaPedido: req.body.fechaPedido,
       fechaEvento: req.body.fechaEvento || null,
       fechaEntrega: req.body.fechaEntrega || null,
@@ -356,6 +371,10 @@ async function updatePendingCustomerOrder(req, res, next) {
       return res.status(404).json(buildMessageResponse('Uno de los productos no existe'));
     }
 
+    if (result.error === 'CLIENT_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Cliente no encontrado'));
+    }
+
     const order = await orderModel.findById(result.orderId);
 
     await registerAudit(req, {
@@ -376,6 +395,41 @@ async function updatePendingCustomerOrder(req, res, next) {
   }
 }
 
+async function deleteOrder(req, res, next) {
+  try {
+    const result = await orderModel.deleteOrder(Number(req.params.id));
+
+    if (result.error === 'NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Pedido no encontrado'));
+    }
+
+    if (result.error === 'HAS_LINKED_SALE') {
+      return res.status(409).json(buildMessageResponse('No se puede eliminar un pedido que ya genero una venta'));
+    }
+
+    if (result.error === 'INVALID_STATE') {
+      return res.status(409).json(buildMessageResponse('No se puede eliminar un pedido que ya esta en armado'));
+    }
+
+    await registerAudit(req, {
+      action: 'pedido_eliminado',
+      entity: 'pedido',
+      entityId: Number(req.params.id),
+      details: {
+        tipo: result.order?.tipo || null,
+        estado: result.order?.estado || null,
+      },
+    });
+
+    return res.status(200).json({
+      ok: true,
+      message: 'Pedido eliminado correctamente',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   listOrders,
   getOrderById,
@@ -384,4 +438,5 @@ module.exports = {
   confirmDraftOrder,
   updateCustomerOrder,
   updatePendingCustomerOrder,
+  deleteOrder,
 };
