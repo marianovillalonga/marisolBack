@@ -302,6 +302,49 @@ class OrderModel {
       : this.createSupplierOrder(payload);
   }
 
+  async buildCustomerItemSnapshots(client, items) {
+    const itemSnapshots = [];
+
+    for (const item of items) {
+      if (item.productoId) {
+        const productResult = await client.query(
+          `
+            SELECT id, nombre
+            FROM productos
+            WHERE id = $1
+            LIMIT 1
+          `,
+          [item.productoId],
+        );
+
+        const product = productResult.rows[0];
+
+        if (!product) {
+          return { error: 'PRODUCT_NOT_FOUND' };
+        }
+
+        itemSnapshots.push({
+          productoId: product.id,
+          productoNombre: product.nombre,
+          descripcion: item.descripcion || '',
+          cantidad: Number(item.cantidad),
+          costoUnitario: Number(item.costoUnitario),
+        });
+        continue;
+      }
+
+      itemSnapshots.push({
+        productoId: null,
+        productoNombre: item.productoNombre,
+        descripcion: item.descripcion || '',
+        cantidad: Number(item.cantidad),
+        costoUnitario: Number(item.costoUnitario),
+      });
+    }
+
+    return { itemSnapshots };
+  }
+
   async ensureUserExists(client, userId) {
     const userResult = await client.query(
       'SELECT id FROM usuarios WHERE id = $1 LIMIT 1',
@@ -783,45 +826,14 @@ class OrderModel {
         return userStatus;
       }
 
-      const itemSnapshots = [];
+      const snapshotResult = await this.buildCustomerItemSnapshots(client, items);
 
-      for (const item of items) {
-        if (item.productoId) {
-          const productResult = await client.query(
-            `
-              SELECT id, nombre, precio
-              FROM productos
-              WHERE id = $1
-              LIMIT 1
-            `,
-            [item.productoId],
-          );
-
-          const product = productResult.rows[0];
-
-          if (!product) {
-            await client.query('ROLLBACK');
-            return { error: 'PRODUCT_NOT_FOUND' };
-          }
-
-          itemSnapshots.push({
-            productoId: product.id,
-            productoNombre: product.nombre,
-            descripcion: item.descripcion || '',
-            cantidad: Number(item.cantidad),
-            costoUnitario: Number(item.costoUnitario),
-          });
-          continue;
-        }
-
-        itemSnapshots.push({
-          productoId: null,
-          productoNombre: item.productoNombre,
-          descripcion: item.descripcion || '',
-          cantidad: Number(item.cantidad),
-          costoUnitario: Number(item.costoUnitario),
-        });
+      if (snapshotResult.error) {
+        await client.query('ROLLBACK');
+        return snapshotResult;
       }
+
+      const itemSnapshots = snapshotResult.itemSnapshots;
 
       const montoTotal = roundToTwo(
         itemSnapshots.reduce(
@@ -896,6 +908,125 @@ class OrderModel {
           ],
         );
       }
+
+      await client.query('COMMIT');
+      return { orderId };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updatePendingCustomerOrder({
+    orderId,
+    userId,
+    fechaPedido,
+    fechaEvento,
+    fechaEntrega,
+    clienteNombre,
+    clienteTelefono,
+    agasajadoNombre,
+    edadAgasajado,
+    tematica,
+    montoEntregado = 0,
+    notas,
+    items,
+  }) {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const userStatus = await this.ensureUserExists(client, userId);
+
+      if (userStatus.error) {
+        await client.query('ROLLBACK');
+        return userStatus;
+      }
+
+      const existingOrderResult = await client.query(
+        `
+          SELECT id, tipo, estado, venta_id
+          FROM pedidos
+          WHERE id = $1
+          LIMIT 1
+          FOR UPDATE
+        `,
+        [orderId],
+      );
+
+      const existingOrder = existingOrderResult.rows[0];
+
+      if (!existingOrder) {
+        await client.query('ROLLBACK');
+        return { error: 'NOT_FOUND' };
+      }
+
+      if (existingOrder.tipo !== 'cliente') {
+        await client.query('ROLLBACK');
+        return { error: 'INVALID_TYPE' };
+      }
+
+      if (existingOrder.estado !== 'pendiente' || existingOrder.venta_id) {
+        await client.query('ROLLBACK');
+        return { error: 'INVALID_STATE' };
+      }
+
+      const snapshotResult = await this.buildCustomerItemSnapshots(client, items);
+
+      if (snapshotResult.error) {
+        await client.query('ROLLBACK');
+        return snapshotResult;
+      }
+
+      const itemSnapshots = snapshotResult.itemSnapshots;
+      const montoTotal = roundToTwo(
+        itemSnapshots.reduce(
+          (accumulator, item) => accumulator + item.cantidad * item.costoUnitario,
+          0,
+        ),
+      );
+      const safeMontoEntregado = roundToTwo(montoEntregado);
+      const saldoPendiente = roundToTwo(Math.max(montoTotal - safeMontoEntregado, 0));
+
+      await client.query(
+        `
+          UPDATE pedidos
+          SET
+            usuario_id = $2,
+            fecha_pedido = $3,
+            fecha_evento = $4,
+            fecha_entrega = $5,
+            cliente_nombre = $6,
+            cliente_telefono = $7,
+            agasajado_nombre = $8,
+            edad_agasajado = $9,
+            tematica = $10,
+            monto_entregado = $11,
+            saldo_pendiente = $12,
+            notas = $13
+          WHERE id = $1
+        `,
+        [
+          orderId,
+          userId,
+          fechaPedido,
+          fechaEvento,
+          fechaEntrega,
+          clienteNombre || null,
+          clienteTelefono || null,
+          agasajadoNombre || null,
+          edadAgasajado,
+          tematica || null,
+          safeMontoEntregado,
+          saldoPendiente,
+          notas || null,
+        ],
+      );
+
+      await this.upsertOrderDetails(client, orderId, itemSnapshots);
 
       await client.query('COMMIT');
       return { orderId };

@@ -12,6 +12,7 @@ router.get('/:id', authMiddleware, validateNumericParams(['id']), roleMiddleware
 router.post('/draft', authMiddleware, roleMiddleware(['admin', 'vendedor']), orderController.saveDraftOrder);
 router.post('/:id/confirm', authMiddleware, validateNumericParams(['id']), roleMiddleware(['admin', 'vendedor']), orderController.confirmDraftOrder);
 router.post('/', authMiddleware, roleMiddleware(['admin', 'vendedor']), orderController.createOrder);
+router.patch('/:id', authMiddleware, validateNumericParams(['id']), roleMiddleware(['admin', 'vendedor']), orderController.updatePendingCustomerOrder);
 router.patch('/:id/customer', authMiddleware, validateNumericParams(['id']), roleMiddleware(['admin', 'vendedor']), orderController.updateCustomerOrder);
 
 module.exports = router;

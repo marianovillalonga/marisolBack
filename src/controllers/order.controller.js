@@ -299,6 +299,83 @@ async function updateCustomerOrder(req, res, next) {
   }
 }
 
+async function updatePendingCustomerOrder(req, res, next) {
+  try {
+    const payload = {
+      ...req.body,
+      tipo: 'cliente',
+    };
+    const validationError = validateOrderInput(payload);
+
+    if (validationError) {
+      return res.status(400).json(buildMessageResponse(validationError));
+    }
+
+    const result = await orderModel.updatePendingCustomerOrder({
+      orderId: Number(req.params.id),
+      userId: req.user.id,
+      fechaPedido: req.body.fechaPedido,
+      fechaEvento: req.body.fechaEvento || null,
+      fechaEntrega: req.body.fechaEntrega || null,
+      clienteNombre: req.body.clienteNombre?.trim?.() || '',
+      clienteTelefono: req.body.clienteTelefono?.trim?.() || '',
+      agasajadoNombre: req.body.agasajadoNombre?.trim?.() || '',
+      edadAgasajado:
+        req.body.edadAgasajado === undefined || req.body.edadAgasajado === null || req.body.edadAgasajado === ''
+          ? null
+          : Number(req.body.edadAgasajado),
+      tematica: req.body.tematica?.trim?.() || '',
+      montoEntregado: Number(req.body.montoEntregado || 0),
+      notas: req.body.notas?.trim?.() || '',
+      items: req.body.items.map((item) => ({
+        productoId: item.productoId ? Number(item.productoId) : null,
+        productoNombre: item.productoNombre?.trim?.() || '',
+        descripcion: item.descripcion?.trim?.() || '',
+        cantidad: Number(item.cantidad),
+        costoUnitario: Number(item.costoUnitario),
+      })),
+    });
+
+    if (result.error === 'USER_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Usuario no encontrado'));
+    }
+
+    if (result.error === 'NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Pedido no encontrado'));
+    }
+
+    if (result.error === 'INVALID_TYPE') {
+      return res.status(400).json(buildMessageResponse('Solo los pedidos de clientes se pueden editar desde este flujo'));
+    }
+
+    if (result.error === 'INVALID_STATE') {
+      return res.status(409).json(buildMessageResponse('Solo se pueden editar pedidos pendientes'));
+    }
+
+    if (result.error === 'PRODUCT_NOT_FOUND') {
+      return res.status(404).json(buildMessageResponse('Uno de los productos no existe'));
+    }
+
+    const order = await orderModel.findById(result.orderId);
+
+    await registerAudit(req, {
+      action: 'pedido_cliente_pendiente_editado',
+      entity: 'pedido',
+      entityId: result.orderId,
+      details: {
+        estado: order?.estado || null,
+        items: req.body.items.length,
+        montoTotal: order?.montoTotal || null,
+        saldoPendiente: order?.saldoPendiente || null,
+      },
+    });
+
+    return res.status(200).json(buildOrderResponse(order, 'Pedido actualizado correctamente'));
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   listOrders,
   getOrderById,
@@ -306,4 +383,5 @@ module.exports = {
   saveDraftOrder,
   confirmDraftOrder,
   updateCustomerOrder,
+  updatePendingCustomerOrder,
 };
