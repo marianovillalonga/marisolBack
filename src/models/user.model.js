@@ -150,7 +150,7 @@ class UserModel {
     const source =
       rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings) ? rawSettings : {};
 
-    return ['efectivo', 'transferencia', 'tarjeta', 'cuenta_corriente'].reduce(
+    return ['debito', 'efectivo', 'transferencia', 'tarjeta', 'cuenta_corriente'].reduce(
       (accumulator, method) => {
         const entry =
           source[method] && typeof source[method] === 'object' && !Array.isArray(source[method])
