@@ -3,7 +3,6 @@ const { registerAudit } = require('../utils/audit.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const { buildEan13, isValidEan13, sanitizeBarcode } = require('../utils/barcode.util');
 const { normalizeImageUrl, validateImageUrl } = require('../utils/image.util');
-const { roundPriceToHundreds } = require('../utils/price.util');
 const { parsePaginationParams } = require('../utils/validation.util');
 const {
   buildCategoriesResponse,
@@ -148,7 +147,7 @@ async function createProduct(req, res, next) {
       codigoBarras: normalizedBarcode,
       cantidad: Number(req.body.cantidad),
       stockMinimo: Number(req.body.stockMinimo),
-      precio: roundPriceToHundreds(req.body.precio),
+      precio: Number(req.body.precio),
       detalle: req.body.detalle?.trim() || '',
       imageUrl: normalizedImage.imageUrl,
     });
@@ -216,7 +215,7 @@ async function updateProduct(req, res, next) {
       codigoBarras: normalizedBarcode,
       cantidad: Number(req.body.cantidad),
       stockMinimo: Number(req.body.stockMinimo),
-      precio: roundPriceToHundreds(req.body.precio),
+      precio: Number(req.body.precio),
       detalle: req.body.detalle?.trim() || '',
       imageUrl: normalizedImage.imageUrl,
     });

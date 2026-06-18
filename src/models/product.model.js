@@ -2,18 +2,6 @@ const pool = require('../config/db');
 const categoryModel = require('./category.model');
 const { buildEan13 } = require('../utils/barcode.util');
 
-function roundedPriceSql(rawPriceExpression) {
-  return `
-    (
-      CASE
-        WHEN MOD(ROUND(ABS(${rawPriceExpression}))::int, 100) <= 50
-          THEN ROUND(ABS(${rawPriceExpression}))::int - MOD(ROUND(ABS(${rawPriceExpression}))::int, 100)
-        ELSE ROUND(ABS(${rawPriceExpression}))::int + (100 - MOD(ROUND(ABS(${rawPriceExpression}))::int, 100))
-      END
-    ) * CASE WHEN ${rawPriceExpression} < 0 THEN -1 ELSE 1 END
-  `;
-}
-
 class ProductModel {
   mapProduct(product) {
     return {
@@ -404,20 +392,14 @@ class ProductModel {
         WITH adjusted_products AS (
           SELECT
             id,
-            precio * (1 + ($2 / 100.0)) AS raw_price
+            ROUND((precio * (1 + ($2 / 100.0)))::numeric, 2) AS precio_ajustado
           FROM productos
           WHERE LOWER(COALESCE(categoria, '')) = LOWER($1)
-        ),
-        rounded_products AS (
-          SELECT
-            id,
-            ${roundedPriceSql('raw_price')} AS precio_redondeado
-          FROM adjusted_products
         )
         UPDATE productos AS productos
-        SET precio = rounded_products.precio_redondeado
-        FROM rounded_products
-        WHERE productos.id = rounded_products.id
+        SET precio = adjusted_products.precio_ajustado
+        FROM adjusted_products
+        WHERE productos.id = adjusted_products.id
         RETURNING
           productos.id,
           productos.nombre,
@@ -436,39 +418,6 @@ class ProductModel {
     );
 
     return rows.map((product) => this.mapProduct(product));
-  }
-
-  async roundExistingProductPrices() {
-    const { rows } = await pool.query(
-      `
-        WITH rounded_products AS (
-          SELECT
-            id,
-            precio AS precio_anterior,
-            ${roundedPriceSql('precio')} AS precio_redondeado
-          FROM productos
-        )
-        UPDATE productos AS productos
-        SET precio = rounded_products.precio_redondeado
-        FROM rounded_products
-        WHERE productos.id = rounded_products.id
-          AND productos.precio IS DISTINCT FROM rounded_products.precio_redondeado
-        RETURNING
-          productos.id,
-          productos.nombre,
-          productos.categoria,
-          rounded_products.precio_anterior,
-          productos.precio AS precio_actual
-      `,
-    );
-
-    return rows.map((product) => ({
-      id: product.id,
-      nombre: product.nombre,
-      categoria: product.categoria,
-      precioAnterior: Number(product.precio_anterior),
-      precioActual: Number(product.precio_actual),
-    }));
   }
 
   async deleteProduct(id) {

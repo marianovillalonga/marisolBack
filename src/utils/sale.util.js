@@ -1,11 +1,15 @@
-const { roundPriceToHundreds } = require('./price.util');
-
 function roundToTwo(value) {
   return Number(Number(value).toFixed(2));
 }
 
-function roundAmountToHundreds(value) {
-  return roundPriceToHundreds(value);
+function roundCurrencyAmount(value) {
+  const safeValue = Number(value);
+
+  if (!Number.isFinite(safeValue)) {
+    return 0;
+  }
+
+  return Math.round(safeValue);
 }
 
 function distributeAmountAcrossItems(amount, bases) {
@@ -51,6 +55,6 @@ function groupSaleItemsByProduct(items) {
 module.exports = {
   distributeAmountAcrossItems,
   groupSaleItemsByProduct,
-  roundAmountToHundreds,
+  roundCurrencyAmount,
   roundToTwo,
 };

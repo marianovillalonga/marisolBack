@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const {
   distributeAmountAcrossItems,
   groupSaleItemsByProduct,
-  roundAmountToHundreds,
+  roundCurrencyAmount,
+  roundToTwo,
 } = require('./sale.util');
 
 test('groupSaleItemsByProduct acumula cantidades del mismo producto', () => {
@@ -27,13 +28,16 @@ test('distributeAmountAcrossItems conserva el total distribuido', () => {
   assert.equal(total, 10);
 });
 
-test('roundAmountToHundreds redondea el precio final de venta a centenas', () => {
-  assert.equal(roundAmountToHundreds(1001), 1000);
-  assert.equal(roundAmountToHundreds(1049), 1000);
-  assert.equal(roundAmountToHundreds(1050), 1000);
-  assert.equal(roundAmountToHundreds(1051), 1100);
-  assert.equal(roundAmountToHundreds(1099), 1100);
-  assert.equal(roundAmountToHundreds(1460), 1500);
-  assert.equal(roundAmountToHundreds(1499), 1500);
-  assert.equal(roundAmountToHundreds(1500), 1500);
+test('roundToTwo conserva importes sin redondeo a centenas', () => {
+  assert.equal(roundToTwo(450), 450);
+  assert.equal(roundToTwo(10800), 10800);
+  assert.equal(roundToTwo(10800.456), 10800.46);
+});
+
+test('roundCurrencyAmount redondea solo al peso', () => {
+  assert.equal(roundCurrencyAmount(400), 400);
+  assert.equal(roundCurrencyAmount(450), 450);
+  assert.equal(roundCurrencyAmount(10800), 10800);
+  assert.equal(roundCurrencyAmount(10800.49), 10800);
+  assert.equal(roundCurrencyAmount(10800.5), 10801);
 });
