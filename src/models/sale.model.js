@@ -2,7 +2,6 @@ const pool = require('../config/db');
 const {
   distributeAmountAcrossItems,
   groupSaleItemsByProduct,
-  roundCurrencyAmount,
   roundToTwo,
 } = require('../utils/sale.util');
 
@@ -403,7 +402,7 @@ class SaleModel {
         : null;
     const ajusteMetodoPagoPorcentaje =
       normalizedPayments.length === 1 ? Number(singlePaymentRule?.porcentaje || 0) : 0;
-    const total = roundCurrencyAmount(Math.max(discountedSubtotal + ajusteMetodoPago, 0));
+    const total = roundToTwo(Math.max(discountedSubtotal + ajusteMetodoPago, 0));
 
     if (montoPagado - total > 0.01) {
       return { error: 'INVALID_PAYMENT_SPLIT' };
