@@ -362,13 +362,15 @@ class SaleModel {
     return items.map((item) => {
       const normalizedProductId = item.productoId ? Number(item.productoId) : null;
       const productSnapshot = normalizedProductId ? productsById.get(normalizedProductId) : null;
+      const cantidad = Number(item.cantidad);
+      const precioUnitario = Number(item.precioUnitario);
 
       return {
         productoId: normalizedProductId,
         productoNombre: productSnapshot?.productoNombre || item.productoNombre || '',
-        cantidad: Number(item.cantidad),
-        precioUnitario: Number(item.precioUnitario),
-        subtotal: Number(item.cantidad) * Number(item.precioUnitario),
+        cantidad,
+        precioUnitario,
+        subtotal: cantidad * precioUnitario,
       };
     });
   }
