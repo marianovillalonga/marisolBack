@@ -90,6 +90,40 @@ class CategoryModel {
     return rows;
   }
 
+  async findCategoryById(id) {
+    const { rows } = await pool.query(
+      `
+        SELECT id, nombre, codigo
+        FROM categorias
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [id],
+    );
+
+    return rows[0] || null;
+  }
+
+  async findSubcategoryById(id) {
+    const { rows } = await pool.query(
+      `
+        SELECT
+          s.id,
+          s.categoria_id AS "categoriaId",
+          s.nombre,
+          s.codigo,
+          c.nombre AS "categoriaNombre"
+        FROM subcategorias s
+        INNER JOIN categorias c ON c.id = s.categoria_id
+        WHERE s.id = $1
+        LIMIT 1
+      `,
+      [id],
+    );
+
+    return rows[0] || null;
+  }
+
   async createCategory(nombre) {
     const normalizedName = nombre.trim();
 

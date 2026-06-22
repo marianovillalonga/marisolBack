@@ -1,4 +1,5 @@
 const productModel = require('../models/product.model');
+const categoryModel = require('../models/category.model');
 const { registerAudit } = require('../utils/audit.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const { buildEan13, isValidEan13, sanitizeBarcode } = require('../utils/barcode.util');
@@ -269,40 +270,77 @@ async function deleteProduct(req, res, next) {
 
 async function adjustPricesByCategory(req, res, next) {
   try {
-    const { categoria, porcentaje } = req.body;
+    const categoryId = Number(req.body.categoryId ?? req.body.categoriaId);
+    const rawSubcategoryId = req.body.subcategoryId ?? req.body.subcategoriaId;
+    const subcategoryId =
+      rawSubcategoryId === undefined || rawSubcategoryId === null || rawSubcategoryId === ''
+        ? null
+        : Number(rawSubcategoryId);
+    const porcentaje = Number(req.body.porcentaje);
 
-    if (!categoria || !categoria.trim()) {
-      return res.status(400).json(buildMessageResponse('La categoria es obligatoria'));
+    if (!Number.isInteger(categoryId) || categoryId <= 0) {
+      return res.status(400).json(buildMessageResponse('La categoria es obligatoria y debe ser valida'));
     }
 
-    if (porcentaje === undefined || Number.isNaN(Number(porcentaje))) {
+    if (!Number.isFinite(porcentaje)) {
       return res.status(400).json(buildMessageResponse('El porcentaje debe ser un numero valido'));
     }
 
-    const updatedProducts = await productModel.adjustPricesByCategory(
-      categoria.trim(),
-      Number(porcentaje),
-    );
+    const category = await categoryModel.findCategoryById(categoryId);
 
-    if (!updatedProducts.length) {
+    if (!category) {
+      return res.status(404).json(buildMessageResponse('La categoria seleccionada no existe'));
+    }
+
+    let subcategory = null;
+
+    if (subcategoryId !== null) {
+      if (!Number.isInteger(subcategoryId) || subcategoryId <= 0) {
+        return res.status(400).json(buildMessageResponse('La subcategoria debe ser valida'));
+      }
+
+      subcategory = await categoryModel.findSubcategoryById(subcategoryId);
+
+      if (!subcategory) {
+        return res.status(404).json(buildMessageResponse('La subcategoria seleccionada no existe'));
+      }
+
+      if (Number(subcategory.categoriaId) !== Number(categoryId)) {
+        return res.status(400).json(buildMessageResponse('La subcategoria no pertenece a la categoria seleccionada'));
+      }
+    }
+
+    const result = await productModel.adjustPricesByCategory({
+      categoryId,
+      subcategoryId,
+      percentage: porcentaje,
+    });
+
+    if (!result.updatedCount) {
       return res.status(404).json(buildMessageResponse('No hay productos para actualizar en esa categoria'));
     }
 
     await registerAudit(req, {
       action: 'precios_ajustados_por_categoria',
       entity: 'categoria',
-      entityId: categoria.trim(),
+      entityId: categoryId,
       details: {
-        categoria: categoria.trim(),
-        porcentaje: Number(porcentaje),
-        productosActualizados: updatedProducts.length,
+        categoriaId: categoryId,
+        categoria: category.nombre,
+        subcategoriaId: subcategoryId,
+        subcategoria: subcategory?.nombre || null,
+        porcentaje,
+        productosActualizados: result.updatedCount,
       },
     });
 
     return res.status(200).json({
       ok: true,
-      message: `Se actualizaron ${updatedProducts.length} producto${updatedProducts.length === 1 ? '' : 's'} de la categoria ${categoria.trim()}`,
-      products: updatedProducts,
+      message: `Se actualizaron ${result.updatedCount} producto${result.updatedCount === 1 ? '' : 's'}${
+        subcategory ? ` de la categoria ${category.nombre} / ${subcategory.nombre}` : ` de la categoria ${category.nombre}`
+      }`,
+      updatedCount: result.updatedCount,
+      products: result.products,
     });
   } catch (error) {
     next(error);

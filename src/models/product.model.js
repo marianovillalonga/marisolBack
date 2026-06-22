@@ -386,15 +386,27 @@ class ProductModel {
     return buildEan13(`${prefix}${nextSequence}`);
   }
 
-  async adjustPricesByCategory(category, percentage) {
+  async adjustPricesByCategory({ categoryId, subcategoryId = null, percentage }) {
     const { rows } = await pool.query(
       `
-        WITH adjusted_products AS (
+        WITH target_products AS (
           SELECT
-            id,
-            ROUND((precio * (1 + ($2 / 100.0)))::numeric, 2) AS precio_ajustado
-          FROM productos
-          WHERE LOWER(COALESCE(categoria, '')) = LOWER($1)
+            p.id
+          FROM productos p
+          INNER JOIN categorias c
+            ON LOWER(TRIM(COALESCE(p.categoria, ''))) = LOWER(TRIM(c.nombre))
+          LEFT JOIN subcategorias s
+            ON s.categoria_id = c.id
+           AND LOWER(TRIM(COALESCE(p.subcategoria, ''))) = LOWER(TRIM(s.nombre))
+          WHERE c.id = $1
+            AND ($2::int IS NULL OR s.id = $2)
+        ),
+        adjusted_products AS (
+          SELECT
+            p.id,
+            ROUND((p.precio * (1 + ($3 / 100.0)))::numeric, 2) AS precio_ajustado
+          FROM productos p
+          INNER JOIN target_products tp ON tp.id = p.id
         )
         UPDATE productos AS productos
         SET precio = adjusted_products.precio_ajustado
@@ -414,10 +426,13 @@ class ProductModel {
           productos.fecha_creacion,
           productos.fecha_actualizacion
       `,
-      [category.trim(), percentage],
+      [categoryId, subcategoryId, percentage],
     );
 
-    return rows.map((product) => this.mapProduct(product));
+    return {
+      products: rows.map((product) => this.mapProduct(product)),
+      updatedCount: rows.length,
+    };
   }
 
   async deleteProduct(id) {
