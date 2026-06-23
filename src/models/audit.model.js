@@ -25,6 +25,11 @@ class AuditModel {
       CREATE INDEX IF NOT EXISTS idx_auditoria_entidad
       ON auditoria(entidad, entidad_id)
     `);
+
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_auditoria_accion_fecha
+      ON auditoria(accion, fecha_creacion DESC)
+    `);
   }
 
   async logAction({
@@ -59,6 +64,107 @@ class AuditModel {
         requestId,
       ],
     );
+  }
+
+  async listPriceAdjustments(limit = 20) {
+    const { rows } = await pool.query(
+      `
+        SELECT
+          a.id,
+          a.detalle_json,
+          a.request_id,
+          a.fecha_creacion,
+          NOT EXISTS (
+            SELECT 1
+            FROM auditoria revert
+            WHERE revert.accion = 'precios_ajuste_anulado'
+              AND revert.entidad = 'categoria'
+              AND revert.detalle_json ->> 'ajusteAnuladoId' = a.id::text
+          ) AS can_revert,
+          u.id AS usuario_id,
+          u.nombre AS usuario_nombre,
+          u.email AS usuario_email
+        FROM auditoria a
+        LEFT JOIN usuarios u
+          ON u.id = a.usuario_id
+        WHERE a.accion = 'precios_ajustados_por_categoria'
+          AND a.entidad = 'categoria'
+        ORDER BY a.fecha_creacion DESC, a.id DESC
+        LIMIT $1
+      `,
+      [limit],
+    );
+
+    return rows.map((row) => ({
+      id: Number(row.id),
+      requestId: row.request_id || null,
+      createdAt: row.fecha_creacion,
+      canRevert: Boolean(row.can_revert),
+      user: row.usuario_id
+        ? {
+            id: Number(row.usuario_id),
+            name: row.usuario_nombre || '',
+            email: row.usuario_email || '',
+          }
+        : null,
+      details: row.detalle_json || {},
+    }));
+  }
+
+  async findPriceAdjustmentById(id) {
+    const { rows } = await pool.query(
+      `
+        SELECT
+          a.id,
+          a.detalle_json,
+          a.request_id,
+          a.fecha_creacion,
+          NOT EXISTS (
+            SELECT 1
+            FROM auditoria revert
+            WHERE revert.accion = 'precios_ajuste_anulado'
+              AND revert.entidad = 'categoria'
+              AND revert.detalle_json ->> 'ajusteAnuladoId' = a.id::text
+          ) AS can_revert,
+          u.id AS usuario_id,
+          u.nombre AS usuario_nombre,
+          u.email AS usuario_email
+        FROM auditoria a
+        LEFT JOIN usuarios u
+          ON u.id = a.usuario_id
+        WHERE a.id = $1
+          AND a.accion = 'precios_ajustados_por_categoria'
+          AND a.entidad = 'categoria'
+        LIMIT 1
+      `,
+      [id],
+    );
+
+    const row = rows[0];
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: Number(row.id),
+      requestId: row.request_id || null,
+      createdAt: row.fecha_creacion,
+      canRevert: Boolean(row.can_revert),
+      user: row.usuario_id
+        ? {
+            id: Number(row.usuario_id),
+            name: row.usuario_nombre || '',
+            email: row.usuario_email || '',
+          }
+        : null,
+      details: row.detalle_json || {},
+    };
+  }
+
+  async findLatestPriceAdjustment() {
+    const [latest] = await this.listPriceAdjustments(1);
+    return latest || null;
   }
 }
 

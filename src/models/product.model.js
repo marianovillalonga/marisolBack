@@ -20,6 +20,14 @@ class ProductModel {
     };
   }
 
+  mapPriceAdjustmentProduct(product) {
+    return {
+      ...this.mapProduct(product),
+      precioAnterior: Number(product.precio_anterior ?? product.precioAnterior ?? product.precio),
+      precioNuevo: Number(product.precio_nuevo ?? product.precioNuevo ?? product.precio),
+    };
+  }
+
   async ensureProductsTable() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS productos (
@@ -387,11 +395,26 @@ class ProductModel {
   }
 
   async adjustPricesByCategory({ categoryId, subcategoryId = null, percentage }) {
-    const { rows } = await pool.query(
-      `
-        WITH target_products AS (
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const { rows: targetRows } = await client.query(
+        `
           SELECT
-            p.id
+            p.id,
+            p.nombre,
+            p.categoria,
+            p.subcategoria,
+            p.codigo_barras,
+            p.cantidad,
+            p.stock_minimo,
+            p.precio AS precio_anterior,
+            p.detalle,
+            p.image_url,
+            p.fecha_creacion,
+            p.fecha_actualizacion
           FROM productos p
           INNER JOIN categorias c
             ON LOWER(TRIM(COALESCE(p.categoria, ''))) = LOWER(TRIM(c.nombre))
@@ -400,39 +423,132 @@ class ProductModel {
            AND LOWER(TRIM(COALESCE(p.subcategoria, ''))) = LOWER(TRIM(s.nombre))
           WHERE c.id = $1
             AND ($2::int IS NULL OR s.id = $2)
-        ),
-        adjusted_products AS (
-          SELECT
-            p.id,
-            ROUND((p.precio * (1 + ($3 / 100.0)))::numeric, 2) AS precio_ajustado
-          FROM productos p
-          INNER JOIN target_products tp ON tp.id = p.id
-        )
-        UPDATE productos AS productos
-        SET precio = adjusted_products.precio_ajustado
-        FROM adjusted_products
-        WHERE productos.id = adjusted_products.id
-        RETURNING
-          productos.id,
-          productos.nombre,
-          productos.categoria,
-          productos.subcategoria,
-          productos.codigo_barras,
-          productos.cantidad,
-          productos.stock_minimo,
-          productos.precio,
-          productos.detalle,
-          productos.image_url,
-          productos.fecha_creacion,
-          productos.fecha_actualizacion
-      `,
-      [categoryId, subcategoryId, percentage],
-    );
+          ORDER BY LOWER(p.nombre) ASC, p.id ASC
+        `,
+        [categoryId, subcategoryId],
+      );
 
-    return {
-      products: rows.map((product) => this.mapProduct(product)),
-      updatedCount: rows.length,
-    };
+      if (!targetRows.length) {
+        await client.query('COMMIT');
+        return {
+          products: [],
+          updatedCount: 0,
+        };
+      }
+
+      const products = [];
+
+      for (const targetRow of targetRows) {
+        const precioAnterior = Number(targetRow.precio_anterior);
+        const precioNuevo = Number((precioAnterior * (1 + percentage / 100)).toFixed(2));
+
+        const { rows } = await client.query(
+          `
+            UPDATE productos
+            SET precio = $2
+            WHERE id = $1
+            RETURNING
+              id,
+              nombre,
+              categoria,
+              subcategoria,
+              codigo_barras,
+              cantidad,
+              stock_minimo,
+              precio,
+              detalle,
+              image_url,
+              fecha_creacion,
+              fecha_actualizacion
+          `,
+          [targetRow.id, precioNuevo],
+        );
+
+        const updatedRow = rows[0];
+
+        products.push({
+          ...this.mapProduct(updatedRow),
+          precioAnterior,
+          precioNuevo,
+        });
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        products,
+        updatedCount: products.length,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async revertPriceAdjustment(products = []) {
+    const normalizedProducts = products
+      .map((product) => ({
+        id: Number(product.id),
+        precioAnterior: Number(product.precioAnterior ?? product.precio_anterior),
+      }))
+      .filter((product) => Number.isInteger(product.id) && Number.isFinite(product.precioAnterior));
+
+    if (!normalizedProducts.length) {
+      return {
+        products: [],
+        updatedCount: 0,
+      };
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const productsToRestore = [];
+
+      for (const product of normalizedProducts) {
+        const { rows } = await client.query(
+          `
+            UPDATE productos
+            SET precio = $2
+            WHERE id = $1
+            RETURNING
+              id,
+              nombre,
+              categoria,
+              subcategoria,
+              codigo_barras,
+              cantidad,
+              stock_minimo,
+              precio,
+              detalle,
+              image_url,
+              fecha_creacion,
+              fecha_actualizacion
+          `,
+          [product.id, product.precioAnterior],
+        );
+
+        if (rows[0]) {
+          productsToRestore.push(this.mapProduct(rows[0]));
+        }
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        products: productsToRestore,
+        updatedCount: productsToRestore.length,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async deleteProduct(id) {

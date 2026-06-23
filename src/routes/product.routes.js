@@ -9,6 +9,9 @@ const router = Router();
 
 router.get('/categories', authMiddleware, roleMiddleware(['admin', 'vendedor']), productController.listCategories);
 router.get('/', authMiddleware, roleMiddleware(['admin', 'vendedor']), productController.listProducts);
+router.get('/price-adjustment/history', authMiddleware, roleMiddleware(['admin']), productController.listPriceAdjustments);
+router.get('/price-adjustment/:id/detail', authMiddleware, validateNumericParams(['id']), roleMiddleware(['admin']), productController.downloadPriceAdjustmentDetail);
+router.post('/price-adjustment/:id/revert', authMiddleware, validateNumericParams(['id']), roleMiddleware(['admin']), productController.revertLastPriceAdjustment);
 router.get('/:id', authMiddleware, validateNumericParams(['id']), roleMiddleware(['admin', 'vendedor']), productController.getProductById);
 router.post('/', authMiddleware, roleMiddleware(['admin']), productController.createProduct);
 router.patch('/price-adjustment', authMiddleware, roleMiddleware(['admin']), productController.adjustPricesByCategory);

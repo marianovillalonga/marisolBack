@@ -1,5 +1,6 @@
 const productModel = require('../models/product.model');
 const categoryModel = require('../models/category.model');
+const auditModel = require('../models/audit.model');
 const { registerAudit } = require('../utils/audit.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const { buildEan13, isValidEan13, sanitizeBarcode } = require('../utils/barcode.util');
@@ -11,6 +12,31 @@ const {
   buildProductResponse,
   buildProductsResponse,
 } = require('../views/product.view');
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatPrice(value) {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
+}
+
+function formatDateTime(value) {
+  return new Intl.DateTimeFormat('es-AR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(new Date(value));
+}
 
 function validateProductInput({ nombre, categoria, subcategoria, cantidad, stockMinimo, precio, imageUrl }) {
   if (!nombre || !categoria || !subcategoria || cantidad === undefined || precio === undefined) {
@@ -331,6 +357,14 @@ async function adjustPricesByCategory(req, res, next) {
         subcategoria: subcategory?.nombre || null,
         porcentaje,
         productosActualizados: result.updatedCount,
+        productos: result.products.map((product) => ({
+          id: product.id,
+          nombre: product.nombre,
+          categoria: product.categoria,
+          subcategoria: product.subcategoria,
+          precioAnterior: product.precioAnterior,
+          precioNuevo: product.precioNuevo,
+        })),
       },
     });
 
@@ -347,6 +381,138 @@ async function adjustPricesByCategory(req, res, next) {
   }
 }
 
+async function listPriceAdjustments(req, res, next) {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
+    const history = await auditModel.listPriceAdjustments(limit);
+
+    return res.status(200).json({
+      ok: true,
+      history,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function downloadPriceAdjustmentDetail(req, res, next) {
+  try {
+    const historyId = Number(req.params.id);
+    const historyItem = await auditModel.findPriceAdjustmentById(historyId);
+
+    if (!historyItem) {
+      return res.status(404).json(buildMessageResponse('No se encontro el ajuste solicitado'));
+    }
+
+    const details = historyItem.details || {};
+    const products = Array.isArray(details.productos) ? details.productos : [];
+    const percentage = Number(details.porcentaje || 0);
+    const categoryName = details.categoria || 'Sin categoria';
+    const subcategoryName = details.subcategoria || '';
+    const filename = `ajuste-precio-${historyId}.xls`;
+
+    const rowsHtml = products
+      .map(
+        (product) => `
+          <tr>
+            <td>${escapeHtml(product.nombre || '')}</td>
+            <td>${formatPrice(product.precioAnterior)}</td>
+            <td>${formatPrice(product.precioNuevo)}</td>
+            <td>${formatDateTime(historyItem.createdAt)}</td>
+            <td>${escapeHtml(`${percentage}%`)}</td>
+          </tr>
+        `,
+      )
+      .join('');
+
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+        </head>
+        <body>
+          <table border="1">
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Precio viejo</th>
+                <th>Precio nuevo</th>
+                <th>Fecha</th>
+                <th>% aumento</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || '<tr><td colspan="5">Sin productos</td></tr>'}
+            </tbody>
+          </table>
+          <table border="1" style="margin-top:16px">
+            <tr><th>Categoria</th><td>${escapeHtml(categoryName)}</td></tr>
+            <tr><th>Subcategoria</th><td>${escapeHtml(subcategoryName || 'Todas')}</td></tr>
+            <tr><th>Fecha</th><td>${escapeHtml(formatDateTime(historyItem.createdAt))}</td></tr>
+            <tr><th>% aumento</th><td>${escapeHtml(`${percentage}%`)}</td></tr>
+          </table>
+        </body>
+      </html>`;
+
+    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.status(200).send(html);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function revertLastPriceAdjustment(req, res, next) {
+  try {
+    const historyId = Number(req.params.id);
+    const latestHistory = await auditModel.findLatestPriceAdjustment();
+
+    if (!latestHistory) {
+      return res.status(404).json(buildMessageResponse('No hay ajustes de precio para anular'));
+    }
+
+    if (Number(latestHistory.id) !== historyId) {
+      return res.status(400).json(buildMessageResponse('Solo se puede anular el ultimo ajuste de precio'));
+    }
+
+    if (!latestHistory.canRevert) {
+      return res.status(400).json(buildMessageResponse('Este ajuste ya fue anulado'));
+    }
+
+    const details = latestHistory.details || {};
+    const products = Array.isArray(details.productos) ? details.productos : [];
+
+    if (!products.length) {
+      return res.status(400).json(buildMessageResponse('El ajuste no contiene productos para revertir'));
+    }
+
+    const result = await productModel.revertPriceAdjustment(products);
+
+    if (!result.updatedCount) {
+      return res.status(404).json(buildMessageResponse('No se pudieron revertir los productos del ajuste'));
+    }
+
+    await registerAudit(req, {
+      action: 'precios_ajuste_anulado',
+      entity: 'categoria',
+      entityId: details.categoriaId || null,
+      details: {
+        ajusteAnuladoId: latestHistory.id,
+        productosRestaurados: result.updatedCount,
+      },
+    });
+
+    return res.status(200).json({
+      ok: true,
+      message: 'Ultimo ajuste de precio anulado correctamente',
+      updatedCount: result.updatedCount,
+      products: result.products,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   listCategories,
   listProducts,
@@ -354,5 +520,8 @@ module.exports = {
   createProduct,
   updateProduct,
   adjustPricesByCategory,
+  listPriceAdjustments,
+  downloadPriceAdjustmentDetail,
+  revertLastPriceAdjustment,
   deleteProduct,
 };
