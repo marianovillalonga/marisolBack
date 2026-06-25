@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const categoryModel = require('./category.model');
 const { buildEan13 } = require('../utils/barcode.util');
+const { calculateAdjustedPrice } = require('../utils/price-adjustment.util');
 
 class ProductModel {
   mapProduct(product) {
@@ -440,7 +441,7 @@ class ProductModel {
 
       for (const targetRow of targetRows) {
         const precioAnterior = Number(targetRow.precio_anterior);
-        const precioNuevo = Number((precioAnterior * (1 + percentage / 100)).toFixed(2));
+        const precioNuevo = calculateAdjustedPrice(precioAnterior, percentage);
 
         const { rows } = await client.query(
           `
