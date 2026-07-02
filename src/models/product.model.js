@@ -96,6 +96,7 @@ class ProductModel {
         (
           $1 = '%%'
           OR LOWER(nombre) LIKE $1
+          OR LOWER(COALESCE(codigo_barras, '')) LIKE $1
         )
         AND (
           $2 = ''
