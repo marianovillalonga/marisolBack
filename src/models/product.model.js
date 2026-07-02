@@ -86,19 +86,16 @@ class ProductModel {
     `);
   }
 
-  async listProducts(search = '', category = '', subcategory = '', pagination = { limit: 20, offset: 0 }) {
+  async listProducts(search = '', category = '', subcategory = '', pagination = { limit: 20, offset: 0 }, barcode = '') {
     const normalizedSearch = `%${search.trim().toLowerCase()}%`;
     const normalizedCategory = category.trim().toLowerCase();
     const normalizedSubcategory = subcategory.trim().toLowerCase();
-    const isBarcodeLikeSearch = /^\d{8,}$/.test(String(search).replace(/\D/g, ''));
-    const filtersQuery = `
+    const normalizedBarcode = barcode.trim().toLowerCase();
+    const buildFiltersQuery = (barcodePlaceholder) => `
       WHERE
         (
           $1 = '%%'
           OR LOWER(nombre) LIKE $1
-          OR LOWER(COALESCE(subcategoria, '')) LIKE $1
-          OR LOWER(COALESCE(detalle, '')) LIKE $1
-          OR LOWER(COALESCE(codigo_barras, '')) LIKE $1
         )
         AND (
           $2 = ''
@@ -108,7 +105,13 @@ class ProductModel {
           $3 = ''
           OR LOWER(COALESCE(subcategoria, '')) = $3
         )
+        AND (
+          ${barcodePlaceholder} = ''
+          OR LOWER(COALESCE(codigo_barras, '')) = ${barcodePlaceholder}
+        )
     `;
+    const filtersQuery = buildFiltersQuery('$6');
+    const countFiltersQuery = buildFiltersQuery('$4');
     const query = `
       SELECT
         id,
@@ -138,34 +141,24 @@ class ProductModel {
     `;
 
     const [{ rows }, countResult] = await Promise.all([
-      pool.query(query, [normalizedSearch, normalizedCategory, normalizedSubcategory, pagination.limit, pagination.offset]),
+      pool.query(query, [
+        normalizedSearch,
+        normalizedCategory,
+        normalizedSubcategory,
+        pagination.limit,
+        pagination.offset,
+        normalizedBarcode,
+      ]),
       pool.query(
         `
           SELECT COUNT(*)::int AS total
           FROM productos
-          ${filtersQuery}
+          ${countFiltersQuery}
         `,
-        [normalizedSearch, normalizedCategory, normalizedSubcategory],
+        [normalizedSearch, normalizedCategory, normalizedSubcategory, normalizedBarcode],
       ),
     ]);
     const total = Number(countResult.rows[0]?.total || 0);
-
-    if (isBarcodeLikeSearch) {
-      console.info('[barcode][products:model] sql lookup', {
-        rawSearch: search,
-        normalizedSearch,
-        category: normalizedCategory,
-        subcategory: normalizedSubcategory,
-        limit: pagination.limit,
-        offset: pagination.offset,
-        returnedRows: rows.length,
-        total,
-        matches: rows.map((product) => ({
-          id: product.id,
-          codigoBarras: product.codigo_barras,
-        })),
-      });
-    }
 
     return {
       products: rows.map((product) => this.mapProduct(product)),

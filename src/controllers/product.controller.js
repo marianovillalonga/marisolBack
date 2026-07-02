@@ -87,21 +87,12 @@ async function listProducts(req, res, next) {
     const pagination = parsePaginationParams(req.query);
     const search = req.query.search || '';
 
-    if (/^\d{8,}$/.test(sanitizeBarcode(search))) {
-      console.info('[barcode][products:controller] received search', {
-        rawSearch: search,
-        sanitizedSearch: sanitizeBarcode(search),
-        page: pagination.page,
-        limit: pagination.limit,
-        offset: pagination.offset,
-      });
-    }
-
     const result = await productModel.listProducts(
       search,
       req.query.category || '',
       req.query.subcategory || '',
       pagination,
+      sanitizeBarcode(req.query.barcode || ''),
     );
     return res
       .status(200)
