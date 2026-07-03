@@ -41,6 +41,7 @@ function groupSaleItemsByProduct(items) {
     if (!groupedItems.has(productId)) {
       groupedItems.set(productId, {
         productoId: productId,
+        productoNombre: item.productoNombre || '',
         cantidadTotal: quantity,
       });
       continue;

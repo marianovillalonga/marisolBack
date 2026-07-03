@@ -11,6 +11,16 @@ const {
   buildSalesSummaryResponse,
 } = require('../views/sale.view');
 
+function buildProductNotFoundMessage(result) {
+  const productReference = result.productName
+    ? `"${result.productName}"${result.productId ? ` (ID ${result.productId})` : ''}`
+    : result.productId
+      ? `con ID ${result.productId}`
+      : 'seleccionado';
+
+  return `El producto ${productReference} no existe`;
+}
+
 async function listSales(req, res, next) {
   try {
     const pagination = parsePaginationParams(req.query);
@@ -106,7 +116,7 @@ async function createSale(req, res, next) {
     }
 
     if (result.error === 'PRODUCT_NOT_FOUND') {
-      return res.status(404).json(buildMessageResponse('Uno de los productos no existe'));
+      return res.status(404).json(buildMessageResponse(buildProductNotFoundMessage(result)));
     }
 
     if (result.error === 'INSUFFICIENT_STOCK') {
@@ -239,7 +249,7 @@ async function confirmDraftSale(req, res, next) {
     }
 
     if (result.error === 'PRODUCT_NOT_FOUND') {
-      return res.status(404).json(buildMessageResponse('Uno de los productos no existe'));
+      return res.status(404).json(buildMessageResponse(buildProductNotFoundMessage(result)));
     }
 
     if (result.error === 'INSUFFICIENT_STOCK') {

@@ -482,7 +482,11 @@ class SaleModel {
       const product = productResult.rows[0];
 
       if (!product) {
-        return { error: 'PRODUCT_NOT_FOUND' };
+        return {
+          error: 'PRODUCT_NOT_FOUND',
+          productId: groupedItem.productoId,
+          productName: groupedItem.productoNombre || '',
+        };
       }
 
       if (Number(product.cantidad) < groupedItem.cantidadTotal) {

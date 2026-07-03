@@ -10,14 +10,14 @@ const {
 
 test('groupSaleItemsByProduct acumula cantidades del mismo producto', () => {
   const grouped = groupSaleItemsByProduct([
-    { productoId: 10, cantidad: 2 },
-    { productoId: 10, cantidad: 3 },
-    { productoId: 11, cantidad: 1 },
+    { productoId: 10, productoNombre: 'Remera', cantidad: 2 },
+    { productoId: 10, productoNombre: 'Remera', cantidad: 3 },
+    { productoId: 11, productoNombre: 'Pantalon', cantidad: 1 },
   ]);
 
   assert.deepEqual(grouped, [
-    { productoId: 10, cantidadTotal: 5 },
-    { productoId: 11, cantidadTotal: 1 },
+    { productoId: 10, productoNombre: 'Remera', cantidadTotal: 5 },
+    { productoId: 11, productoNombre: 'Pantalon', cantidadTotal: 1 },
   ]);
 });
 
