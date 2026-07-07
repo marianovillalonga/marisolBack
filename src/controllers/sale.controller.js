@@ -12,6 +12,20 @@ const {
 } = require('../views/sale.view');
 
 function buildProductNotFoundMessage(result) {
+  if (Array.isArray(result.missingProducts) && result.missingProducts.length > 1) {
+    const productReferences = result.missingProducts
+      .map((product) =>
+        product.productName
+          ? `"${product.productName}"${product.productId ? ` (ID ${product.productId})` : ''}`
+          : product.productId
+            ? `ID ${product.productId}`
+            : 'sin identificar',
+      )
+      .join(', ');
+
+    return `Estos productos no existen: ${productReferences}`;
+  }
+
   const productReference = result.productName
     ? `"${result.productName}"${result.productId ? ` (ID ${result.productId})` : ''}`
     : result.productId

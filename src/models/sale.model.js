@@ -466,6 +466,7 @@ class SaleModel {
     );
     const groupedItems = groupSaleItemsByProduct(catalogItems);
     const productsById = new Map();
+    const missingProducts = [];
 
     for (const groupedItem of groupedItems) {
       const productResult = await client.query(
@@ -482,11 +483,11 @@ class SaleModel {
       const product = productResult.rows[0];
 
       if (!product) {
-        return {
-          error: 'PRODUCT_NOT_FOUND',
+        missingProducts.push({
           productId: groupedItem.productoId,
           productName: groupedItem.productoNombre || '',
-        };
+        });
+        continue;
       }
 
       if (Number(product.cantidad) < groupedItem.cantidadTotal) {
@@ -501,6 +502,15 @@ class SaleModel {
         productoId: product.id,
         productoNombre: product.nombre,
       });
+    }
+
+    if (missingProducts.length) {
+      return {
+        error: 'PRODUCT_NOT_FOUND',
+        missingProducts,
+        productId: missingProducts[0].productId,
+        productName: missingProducts[0].productName,
+      };
     }
 
     return {
