@@ -34,19 +34,20 @@ test('validateBudgetInput rechaza cliente invalido', () => {
   assert.equal(error, 'El cliente seleccionado no es valido');
 });
 
-test('validateOrderInput de cliente requiere agasajado', () => {
+test('validateOrderInput de cliente acepta datos de agasajado opcionales', () => {
   const error = validateOrderInput({
     tipo: 'cliente',
     fechaPedido: '2026-04-08',
-    fechaEvento: '2026-04-10',
-    fechaEntrega: '2026-04-09',
+    fechaEvento: null,
+    fechaEntrega: null,
     clienteNombre: 'Maria',
+    clienteTelefono: '11 2345 6789',
     agasajadoNombre: '',
     montoEntregado: 0,
     items: [{ productoNombre: 'Combo', cantidad: 1, costoUnitario: 100 }],
   });
 
-  assert.equal(error, 'El nombre del agasajado es obligatorio');
+  assert.equal(error, null);
 });
 
 test('validateOrderInput de proveedor acepta item manual valido', () => {

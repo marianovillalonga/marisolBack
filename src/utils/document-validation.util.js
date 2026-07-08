@@ -286,23 +286,27 @@ function validateCustomerOrderInput({
     return 'La fecha del pedido es obligatoria';
   }
 
-  if (!isValidDate(fechaEvento)) {
-    return 'La fecha del evento es obligatoria';
+  if (isNonEmptyString(fechaEvento) && !isValidDate(fechaEvento)) {
+    return 'La fecha del evento no es valida';
   }
 
-  if (!isValidDate(fechaEntrega)) {
-    return 'La fecha de entrega es obligatoria';
+  if (isNonEmptyString(fechaEntrega) && !isValidDate(fechaEntrega)) {
+    return 'La fecha de entrega no es valida';
   }
 
-  if (toTimestamp(fechaPedido) > toTimestamp(fechaEvento)) {
+  if (isValidDate(fechaEvento) && toTimestamp(fechaPedido) > toTimestamp(fechaEvento)) {
     return 'La fecha del pedido no puede ser posterior a la fecha del evento';
   }
 
-  if (toTimestamp(fechaPedido) > toTimestamp(fechaEntrega)) {
+  if (isValidDate(fechaEntrega) && toTimestamp(fechaPedido) > toTimestamp(fechaEntrega)) {
     return 'La fecha del pedido no puede ser posterior a la fecha de entrega';
   }
 
-  if (toTimestamp(fechaEntrega) > toTimestamp(fechaEvento)) {
+  if (
+    isValidDate(fechaEntrega) &&
+    isValidDate(fechaEvento) &&
+    toTimestamp(fechaEntrega) > toTimestamp(fechaEvento)
+  ) {
     return 'La fecha de entrega no puede ser posterior a la fecha del evento';
   }
 
@@ -312,10 +316,6 @@ function validateCustomerOrderInput({
 
   if (!hasMaxLength(clienteNombre, 150)) {
     return 'El nombre del cliente no puede superar los 150 caracteres';
-  }
-
-  if (!isNonEmptyString(agasajadoNombre)) {
-    return 'El nombre del agasajado es obligatorio';
   }
 
   if (!hasMaxLength(agasajadoNombre, 150)) {
