@@ -108,7 +108,7 @@ class ProductModel {
         )
         AND (
           ${barcodePlaceholder} = ''
-          OR LOWER(COALESCE(codigo_barras, '')) = ${barcodePlaceholder}
+          OR REGEXP_REPLACE(COALESCE(codigo_barras, ''), '\\D', '', 'g') = ${barcodePlaceholder}
         )
     `;
     const filtersQuery = buildFiltersQuery('$6');
