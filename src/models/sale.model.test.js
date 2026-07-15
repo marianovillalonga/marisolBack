@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+const pool = require('../config/db');
 const saleModel = require('./sale.model');
 
 test('calculateSaleTotals conserva una venta manual de 7000 sin ajuste de pago', () => {
@@ -128,4 +129,77 @@ test('calculateSaleTotals aplica recargo por metodo de pago sin redondear al pes
   assert.equal(totals.ajusteMetodoPagoTipo, 'aumento');
   assert.equal(totals.ajusteMetodoPagoPorcentaje, 8);
   assert.equal(totals.total, 3780);
+});
+
+test('findById devuelve los items de la venta en el mismo orden en que fueron guardados', async () => {
+  const originalQuery = pool.query;
+  const queries = [];
+
+  pool.query = async (query, params) => {
+    queries.push(query);
+
+    if (query.includes('FROM ventas v')) {
+      return {
+        rows: [
+          {
+            id: params[0],
+            cliente_id: null,
+            cliente_nombre: null,
+            vendedor_id: 1,
+            vendedor_nombre: 'Vendedor',
+            subtotal: 300,
+            ajuste_metodo_pago: 0,
+            ajuste_metodo_pago_tipo: null,
+            ajuste_metodo_pago_porcentaje: 0,
+            descuento: 0,
+            total: 300,
+            monto_pagado: 300,
+            deuda_pendiente: 0,
+            metodo_pago: 'efectivo',
+            pagos: [{ metodo: 'efectivo', monto: 300 }],
+            estado: 'en_progreso',
+            notas: null,
+            fecha_venta: '2026-07-14T00:00:00.000Z',
+            cantidad_items: 3,
+          },
+        ],
+      };
+    }
+
+    return {
+      rows: [
+        {
+          id: 10,
+          venta_id: params[0],
+          producto_id: 1,
+          producto_nombre: 'Primero',
+          cantidad: 1,
+          precio_unitario: 100,
+          subtotal: 100,
+        },
+        {
+          id: 11,
+          venta_id: params[0],
+          producto_id: 2,
+          producto_nombre: 'Segundo',
+          cantidad: 1,
+          precio_unitario: 200,
+          subtotal: 200,
+        },
+      ],
+    };
+  };
+
+  try {
+    const sale = await saleModel.findById(123);
+    const detailsQuery = queries.find((query) => query.includes('FROM venta_detalles'));
+
+    assert.match(detailsQuery, /ORDER BY id ASC/);
+    assert.deepEqual(
+      sale.items.map((item) => item.productoNombre),
+      ['Primero', 'Segundo'],
+    );
+  } finally {
+    pool.query = originalQuery;
+  }
 });

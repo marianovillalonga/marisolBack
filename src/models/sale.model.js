@@ -316,7 +316,7 @@ class SaleModel {
           subtotal
         FROM venta_detalles
         WHERE venta_id = $1
-        ORDER BY id DESC
+        ORDER BY id ASC
       `,
       [id],
     );
