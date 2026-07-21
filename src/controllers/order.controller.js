@@ -1,6 +1,7 @@
 const orderModel = require('../models/order.model');
 const { registerAudit } = require('../utils/audit.util');
 const { validateCustomerOrderUpdateInput, validateOrderInput } = require('../utils/document-validation.util');
+const { normalizeOrderHonoreeVisibility } = require('../utils/order-honoree-visibility.util');
 const { parsePaginationParams } = require('../utils/validation.util');
 const { buildMessageResponse } = require('../views/auth.view');
 const {
@@ -58,6 +59,7 @@ async function createOrder(req, res, next) {
           ? null
           : Number(req.body.edadAgasajado),
       tematica: req.body.tematica?.trim?.() || '',
+      mostrarDatosAgasajado: normalizeOrderHonoreeVisibility(tipo, req.body.mostrarDatosAgasajado),
       montoEntregado: Number(req.body.montoEntregado || 0),
       notas: req.body.notas?.trim?.() || '',
       items: req.body.items.map((item) => ({
@@ -134,6 +136,7 @@ async function saveDraftOrder(req, res, next) {
           ? null
           : Number(req.body.edadAgasajado),
       tematica: req.body.tematica?.trim?.() || '',
+      mostrarDatosAgasajado: normalizeOrderHonoreeVisibility(tipo, req.body.mostrarDatosAgasajado),
       montoEntregado: Number(req.body.montoEntregado || 0),
       notas: req.body.notas?.trim?.() || '',
       items: req.body.items.map((item) => ({
@@ -340,6 +343,7 @@ async function updatePendingCustomerOrder(req, res, next) {
           ? null
           : Number(req.body.edadAgasajado),
       tematica: req.body.tematica?.trim?.() || '',
+      mostrarDatosAgasajado: normalizeOrderHonoreeVisibility('cliente', req.body.mostrarDatosAgasajado),
       montoEntregado: Number(req.body.montoEntregado || 0),
       notas: req.body.notas?.trim?.() || '',
       items: req.body.items.map((item) => ({
@@ -364,7 +368,7 @@ async function updatePendingCustomerOrder(req, res, next) {
     }
 
     if (result.error === 'INVALID_STATE') {
-      return res.status(409).json(buildMessageResponse('Solo se pueden editar pedidos pendientes'));
+      return res.status(409).json(buildMessageResponse('Solo se pueden editar pedidos pendientes o hechos'));
     }
 
     if (result.error === 'PRODUCT_NOT_FOUND') {

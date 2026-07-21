@@ -203,3 +203,178 @@ test('findById devuelve los items de la venta en el mismo orden en que fueron gu
     pool.query = originalQuery;
   }
 });
+
+test('listSales excluye ventas anuladas en datos y total de paginacion', async () => {
+  const originalQuery = pool.query;
+  const queries = [];
+
+  pool.query = async (query, params) => {
+    queries.push({ query, params });
+
+    if (query.includes('COUNT(*)')) {
+      return { rows: [{ total: 3 }] };
+    }
+
+    return {
+      rows: [
+        {
+          id: 10,
+          cliente_id: null,
+          cliente_nombre: null,
+          vendedor_id: 1,
+          vendedor_nombre: 'Vendedor',
+          subtotal: 1000,
+          ajuste_metodo_pago: 0,
+          ajuste_metodo_pago_tipo: null,
+          ajuste_metodo_pago_porcentaje: 0,
+          descuento: 0,
+          total: 1000,
+          monto_pagado: 1000,
+          deuda_pendiente: 0,
+          metodo_pago: 'efectivo',
+          pagos: [{ metodo: 'efectivo', monto: 1000 }],
+          estado: 'confirmada',
+          notas: null,
+          fecha_venta: '2026-07-20T00:00:00.000Z',
+          cantidad_items: 1,
+        },
+        {
+          id: 11,
+          cliente_id: null,
+          cliente_nombre: null,
+          vendedor_id: 1,
+          vendedor_nombre: 'Vendedor',
+          subtotal: 500,
+          ajuste_metodo_pago: 0,
+          ajuste_metodo_pago_tipo: null,
+          ajuste_metodo_pago_porcentaje: 0,
+          descuento: 0,
+          total: 500,
+          monto_pagado: 0,
+          deuda_pendiente: 500,
+          metodo_pago: 'efectivo',
+          pagos: [],
+          estado: 'en_progreso',
+          notas: null,
+          fecha_venta: '2026-07-19T00:00:00.000Z',
+          cantidad_items: 1,
+        },
+        {
+          id: 12,
+          cliente_id: 2,
+          cliente_nombre: 'Cliente confirmada',
+          vendedor_id: 1,
+          vendedor_nombre: 'Vendedor',
+          subtotal: 750,
+          ajuste_metodo_pago: 0,
+          ajuste_metodo_pago_tipo: null,
+          ajuste_metodo_pago_porcentaje: 0,
+          descuento: 0,
+          total: 750,
+          monto_pagado: 750,
+          deuda_pendiente: 0,
+          metodo_pago: 'efectivo',
+          pagos: [{ metodo: 'efectivo', monto: 750 }],
+          estado: 'confirmada',
+          notas: null,
+          fecha_venta: '2026-07-18T00:00:00.000Z',
+          cantidad_items: 1,
+        },
+      ],
+    };
+  };
+
+  try {
+    const result = await saleModel.listSales('', 'all', { limit: 20, offset: 0 });
+
+    assert.equal(result.total, 3);
+    assert.deepEqual(result.sales.map((sale) => sale.estado), ['confirmada', 'en_progreso', 'confirmada']);
+    assert.equal(queries.length, 2);
+    assert.ok(
+      queries.every(({ query }) => query.includes("LOWER(TRIM(v.estado)) <> 'anulada'")),
+      'datos y count deben excluir anuladas en SQL',
+    );
+    assert.ok(
+      queries.every(({ query }) => query.includes("LOWER(TRIM(v.estado)) = $2")),
+      'datos y count deben compartir tambien la condicion normalizada de estado',
+    );
+  } finally {
+    pool.query = originalQuery;
+  }
+});
+
+test('listSales mantiene coherente el filtro confirmada sin incluir anuladas', async () => {
+  const originalQuery = pool.query;
+  const queries = [];
+
+  pool.query = async (query, params) => {
+    queries.push({ query, params });
+
+    if (query.includes('COUNT(*)')) {
+      return { rows: [{ total: 1 }] };
+    }
+
+    return {
+      rows: [
+        {
+          id: 20,
+          cliente_id: 3,
+          cliente_nombre: 'Cliente',
+          vendedor_id: 1,
+          vendedor_nombre: 'Vendedor',
+          subtotal: 1500,
+          ajuste_metodo_pago: 0,
+          ajuste_metodo_pago_tipo: null,
+          ajuste_metodo_pago_porcentaje: 0,
+          descuento: 0,
+          total: 1500,
+          monto_pagado: 1500,
+          deuda_pendiente: 0,
+          metodo_pago: 'efectivo',
+          pagos: [{ metodo: 'efectivo', monto: 1500 }],
+          estado: 'confirmada',
+          notas: null,
+          fecha_venta: '2026-07-20T00:00:00.000Z',
+          cantidad_items: 1,
+        },
+      ],
+    };
+  };
+
+  try {
+    const result = await saleModel.listSales('', 'confirmada', { limit: 20, offset: 0 });
+
+    assert.equal(result.total, 1);
+    assert.deepEqual(result.sales.map((sale) => sale.estado), ['confirmada']);
+    assert.ok(queries.every(({ params }) => params[1] === 'confirmada'));
+    assert.ok(queries.every(({ query }) => query.includes("LOWER(TRIM(v.estado)) <> 'anulada'")));
+  } finally {
+    pool.query = originalQuery;
+  }
+});
+
+test('listSales no expone ventas anuladas aun si se solicita ese estado', async () => {
+  const originalQuery = pool.query;
+  const queries = [];
+
+  pool.query = async (query, params) => {
+    queries.push({ query, params });
+
+    if (query.includes('COUNT(*)')) {
+      return { rows: [{ total: 0 }] };
+    }
+
+    return { rows: [] };
+  };
+
+  try {
+    const result = await saleModel.listSales('', 'anulada', { limit: 20, offset: 0 });
+
+    assert.equal(result.total, 0);
+    assert.deepEqual(result.sales, []);
+    assert.ok(queries.every(({ params }) => params[1] === 'anulada'));
+    assert.ok(queries.every(({ query }) => query.includes("LOWER(TRIM(v.estado)) <> 'anulada'")));
+  } finally {
+    pool.query = originalQuery;
+  }
+});

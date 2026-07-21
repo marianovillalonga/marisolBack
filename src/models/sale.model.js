@@ -206,6 +206,8 @@ class SaleModel {
     const normalizedStatus = status.trim().toLowerCase();
     const filtersQuery = `
       WHERE
+        LOWER(TRIM(v.estado)) <> 'anulada'
+        AND
         (
           $1 = '%%'
           OR LOWER(COALESCE(c.nombre, 'consumidor final')) LIKE $1
@@ -214,7 +216,7 @@ class SaleModel {
         )
         AND (
           $2 = 'all'
-          OR LOWER(v.estado) = $2
+          OR LOWER(TRIM(v.estado)) = $2
         )
     `;
 

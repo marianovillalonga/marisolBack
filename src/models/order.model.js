@@ -26,6 +26,7 @@ class OrderModel {
       agasajadoNombre: row.agasajado_nombre,
       edadAgasajado: row.edad_agasajado !== null ? Number(row.edad_agasajado) : null,
       tematica: row.tematica,
+      mostrarDatosAgasajado: Boolean(row.mostrar_datos_agasajado),
       metodoPago: row.metodo_pago,
       ventaId: row.venta_id,
       notas: row.notas,
@@ -71,6 +72,7 @@ class OrderModel {
         agasajado_nombre VARCHAR(150),
         edad_agasajado INTEGER,
         tematica VARCHAR(150),
+        mostrar_datos_agasajado BOOLEAN NOT NULL DEFAULT FALSE,
         monto_entregado NUMERIC(12, 2) NOT NULL DEFAULT 0,
         saldo_pendiente NUMERIC(12, 2) NOT NULL DEFAULT 0,
         metodo_pago VARCHAR(50),
@@ -107,6 +109,7 @@ class OrderModel {
       ADD COLUMN IF NOT EXISTS agasajado_nombre VARCHAR(150),
       ADD COLUMN IF NOT EXISTS edad_agasajado INTEGER,
       ADD COLUMN IF NOT EXISTS tematica VARCHAR(150),
+      ADD COLUMN IF NOT EXISTS mostrar_datos_agasajado BOOLEAN NOT NULL DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS monto_entregado NUMERIC(12, 2) NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS saldo_pendiente NUMERIC(12, 2) NOT NULL DEFAULT 0,
       ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(50),
@@ -196,6 +199,7 @@ class OrderModel {
         p.agasajado_nombre,
         p.edad_agasajado,
         p.tematica,
+        p.mostrar_datos_agasajado,
         p.monto_entregado,
         p.saldo_pendiente,
         p.metodo_pago,
@@ -472,11 +476,12 @@ class OrderModel {
               agasajado_nombre = $10,
               edad_agasajado = $11,
               tematica = $12,
-              monto_entregado = $13,
-              saldo_pendiente = $14,
+              mostrar_datos_agasajado = $13,
+              monto_entregado = $14,
+              saldo_pendiente = $15,
               metodo_pago = NULL,
               venta_id = NULL,
-              notas = $15
+              notas = $16
             WHERE id = $1
           `,
           [
@@ -492,6 +497,7 @@ class OrderModel {
             payload.tipo === 'cliente' ? payload.agasajadoNombre || null : null,
             payload.tipo === 'cliente' ? payload.edadAgasajado : null,
             payload.tipo === 'cliente' ? payload.tematica || null : null,
+            payload.tipo === 'cliente' ? Boolean(payload.mostrarDatosAgasajado) : false,
             safeMontoEntregado,
             saldoPendiente,
             payload.notas || null,
@@ -513,11 +519,12 @@ class OrderModel {
               agasajado_nombre,
               edad_agasajado,
               tematica,
+              mostrar_datos_agasajado,
               monto_entregado,
               saldo_pendiente,
               notas
             )
-            VALUES ($1, $2, 'en_progreso', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            VALUES ($1, $2, 'en_progreso', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             RETURNING id
           `,
           [
@@ -532,6 +539,7 @@ class OrderModel {
             payload.tipo === 'cliente' ? payload.agasajadoNombre || null : null,
             payload.tipo === 'cliente' ? payload.edadAgasajado : null,
             payload.tipo === 'cliente' ? payload.tematica || null : null,
+            payload.tipo === 'cliente' ? Boolean(payload.mostrarDatosAgasajado) : false,
             safeMontoEntregado,
             saldoPendiente,
             payload.notas || null,
@@ -836,6 +844,7 @@ class OrderModel {
     agasajadoNombre,
     edadAgasajado,
     tematica,
+    mostrarDatosAgasajado = false,
     montoEntregado = 0,
     notas,
     items,
@@ -889,11 +898,12 @@ class OrderModel {
             agasajado_nombre,
             edad_agasajado,
             tematica,
+            mostrar_datos_agasajado,
             monto_entregado,
             saldo_pendiente,
             notas
           )
-          VALUES ($1, 'cliente', 'pendiente', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          VALUES ($1, 'cliente', 'pendiente', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
           RETURNING id
         `,
         [
@@ -907,6 +917,7 @@ class OrderModel {
           agasajadoNombre || null,
           edadAgasajado,
           tematica || null,
+          Boolean(mostrarDatosAgasajado),
           safeMontoEntregado,
           saldoPendiente,
           notas || null,
@@ -963,6 +974,7 @@ class OrderModel {
     agasajadoNombre,
     edadAgasajado,
     tematica,
+    mostrarDatosAgasajado = false,
     montoEntregado = 0,
     notas,
     items,
@@ -1006,7 +1018,7 @@ class OrderModel {
         return { error: 'INVALID_TYPE' };
       }
 
-      if (existingOrder.estado !== 'pendiente' || existingOrder.venta_id) {
+      if (!['pendiente', 'hecho'].includes(existingOrder.estado) || existingOrder.venta_id) {
         await client.query('ROLLBACK');
         return { error: 'INVALID_STATE' };
       }
@@ -1042,9 +1054,10 @@ class OrderModel {
             agasajado_nombre = $9,
             edad_agasajado = $10,
             tematica = $11,
-            monto_entregado = $12,
-            saldo_pendiente = $13,
-            notas = $14
+            mostrar_datos_agasajado = $12,
+            monto_entregado = $13,
+            saldo_pendiente = $14,
+            notas = $15
           WHERE id = $1
         `,
         [
@@ -1059,6 +1072,7 @@ class OrderModel {
           agasajadoNombre || null,
           edadAgasajado,
           tematica || null,
+          Boolean(mostrarDatosAgasajado),
           safeMontoEntregado,
           saldoPendiente,
           notas || null,
