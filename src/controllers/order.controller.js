@@ -412,7 +412,7 @@ async function deleteOrder(req, res, next) {
     }
 
     if (result.error === 'INVALID_STATE') {
-      return res.status(409).json(buildMessageResponse('No se puede eliminar un pedido que ya esta en armado'));
+      return res.status(409).json(buildMessageResponse('No se puede eliminar un pedido que ya esta entregado'));
     }
 
     await registerAudit(req, {

@@ -1271,7 +1271,7 @@ class OrderModel {
         return { error: 'HAS_LINKED_SALE' };
       }
 
-      if (order.estado === 'hecho') {
+      if (order.estado === 'entregado') {
         await client.query('ROLLBACK');
         return { error: 'INVALID_STATE' };
       }
