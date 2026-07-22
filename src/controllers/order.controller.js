@@ -67,7 +67,7 @@ async function createOrder(req, res, next) {
         productoNombre: item.productoNombre?.trim?.() || '',
         descripcion: item.descripcion?.trim?.() || '',
         cantidad: Number(item.cantidad),
-        costoUnitario: Number(item.costoUnitario),
+        costoUnitario: Number(item.costoUnitario || 0),
       })),
     });
 
@@ -144,7 +144,7 @@ async function saveDraftOrder(req, res, next) {
         productoNombre: item.productoNombre?.trim?.() || '',
         descripcion: item.descripcion?.trim?.() || '',
         cantidad: Number(item.cantidad),
-        costoUnitario: Number(item.costoUnitario),
+        costoUnitario: Number(item.costoUnitario || 0),
       })),
     });
 
@@ -351,7 +351,7 @@ async function updatePendingCustomerOrder(req, res, next) {
         productoNombre: item.productoNombre?.trim?.() || '',
         descripcion: item.descripcion?.trim?.() || '',
         cantidad: Number(item.cantidad),
-        costoUnitario: Number(item.costoUnitario),
+        costoUnitario: Number(item.costoUnitario || 0),
       })),
     });
 

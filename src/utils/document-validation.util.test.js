@@ -59,3 +59,19 @@ test('validateOrderInput de proveedor acepta item manual valido', () => {
 
   assert.equal(error, null);
 });
+
+test('validateOrderInput acepta pedido de cliente sin precio unitario y lo trata como opcional', () => {
+  const error = validateOrderInput({
+    tipo: 'cliente',
+    fechaPedido: '2026-04-08',
+    fechaEvento: null,
+    fechaEntrega: null,
+    clienteNombre: 'Maria',
+    clienteTelefono: '11 2345 6789',
+    agasajadoNombre: '',
+    montoEntregado: 0,
+    items: [{ productoNombre: 'Combo', cantidad: 1 }],
+  });
+
+  assert.equal(error, null);
+});

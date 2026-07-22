@@ -47,7 +47,15 @@ const allowedPaymentMethods = [
 
 function validateDocumentItems(
   items,
-  { emptyMessage, missingProductMessage, quantityMessage, priceMessage, manualNameMinLengthMessage, manualNameMaxLengthMessage },
+  {
+    emptyMessage,
+    missingProductMessage,
+    quantityMessage,
+    priceMessage,
+    manualNameMinLengthMessage,
+    manualNameMaxLengthMessage,
+    allowMissingPriceAsZero = false,
+  },
 ) {
   if (!Array.isArray(items) || items.length === 0) {
     return emptyMessage;
@@ -81,7 +89,12 @@ function validateDocumentItems(
       return quantityMessage;
     }
 
-    if (!isNonNegativeNumber(item?.precioUnitario ?? item?.costoUnitario)) {
+    const unitPrice = item?.precioUnitario ?? item?.costoUnitario;
+
+    if (
+      !(allowMissingPriceAsZero && (unitPrice === undefined || unitPrice === null || unitPrice === '')) &&
+      !isNonNegativeNumber(unitPrice)
+    ) {
       return priceMessage;
     }
   }
@@ -259,6 +272,7 @@ function validateProviderOrderInput({ fechaPedido, items }) {
     priceMessage: 'El costo de cada item debe ser mayor o igual a 0',
     manualNameMinLengthMessage: 'La descripcion manual debe tener al menos 3 caracteres',
     manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 250 caracteres',
+    allowMissingPriceAsZero: true,
   });
 }
 
@@ -346,6 +360,7 @@ function validateCustomerOrderInput({
     priceMessage: 'El precio de cada item debe ser mayor o igual a 0',
     manualNameMinLengthMessage: 'La descripcion manual debe tener al menos 3 caracteres',
     manualNameMaxLengthMessage: 'La descripcion manual no puede superar los 250 caracteres',
+    allowMissingPriceAsZero: true,
   });
 
   if (itemsError) {
