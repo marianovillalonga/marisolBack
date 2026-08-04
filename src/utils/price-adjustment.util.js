@@ -1,11 +1,13 @@
-function roundToNearest50(value) {
+const PRICE_ROUNDING_INCREMENT = 100;
+
+function roundToNearest100(value) {
   const safeValue = Number(value);
 
   if (!Number.isFinite(safeValue)) {
     return 0;
   }
 
-  return Math.round(safeValue / 50) * 50;
+  return Math.round(safeValue / PRICE_ROUNDING_INCREMENT) * PRICE_ROUNDING_INCREMENT;
 }
 
 function calculateAdjustedPrice(currentPrice, percentage) {
@@ -16,10 +18,10 @@ function calculateAdjustedPrice(currentPrice, percentage) {
     return 0;
   }
 
-  return roundToNearest50(safeCurrentPrice * (1 + safePercentage / 100));
+  return roundToNearest100(safeCurrentPrice * (1 + safePercentage / 100));
 }
 
 module.exports = {
   calculateAdjustedPrice,
-  roundToNearest50,
+  roundToNearest100,
 };
