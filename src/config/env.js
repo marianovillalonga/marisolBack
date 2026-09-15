@@ -66,11 +66,13 @@ function validateRuntimeConfig() {
     }
   }
 
-  if (isProduction && DB_SSL === 'false') {
+  const isLocalhost = DATABASE_URL.includes('localhost') || DB_HOST === 'localhost' || DB_HOST === '127.0.0.1';
+
+  if (isProduction && DB_SSL === 'false' && !isLocalhost) {
     issues.push('DB_SSL no debe deshabilitarse en produccion');
   }
 
-  if (isProduction && DB_SSL_REJECT_UNAUTHORIZED === 'false') {
+  if (isProduction && DB_SSL_REJECT_UNAUTHORIZED === 'false' && !isLocalhost) {
     issues.push('DB_SSL_REJECT_UNAUTHORIZED=false solo deberia usarse temporalmente fuera de produccion');
   }
 
