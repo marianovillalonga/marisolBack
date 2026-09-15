@@ -90,10 +90,6 @@ function validateRuntimeConfig() {
     issues.push('MAIL_FROM es obligatorio cuando hay un proveedor de email configurado');
   }
 
-  if (isProduction && !RESEND_API_KEY.trim()) {
-    issues.push('Debes configurar RESEND_API_KEY en produccion para recuperar passwords');
-  }
-
   if (isProduction && !MAIL_FROM.trim()) {
     issues.push('MAIL_FROM es obligatorio en produccion para recuperar passwords');
   }

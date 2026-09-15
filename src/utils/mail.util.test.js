@@ -153,6 +153,47 @@ test('sendEmail falla en produccion si falta RESEND_API_KEY', async () => {
   restoreEnv(snapshot);
 });
 
+test('sendEmail sin RESEND_API_KEY registra error sin exponer secretos', async () => {
+  const snapshot = { ...process.env };
+  const logs = [];
+
+  process.env.NODE_ENV = 'production';
+  process.env.RESEND_API_KEY = '';
+  process.env.MAIL_FROM = 'noreply@mariovillalonga.website';
+
+  Module._load = function mockModuleLoader(request, parent, isMain) {
+    if (request === '../utils/logger.util') {
+      return {
+        error: (message, meta) => {
+          logs.push({ message, meta });
+        },
+        warn: () => {},
+        info: () => {},
+      };
+    }
+
+    return originalLoad(request, parent, isMain);
+  };
+
+  const { sendEmail } = loadMailModule();
+
+  await assert.rejects(() =>
+    sendEmail({
+      to: 'test@example.com',
+      subject: 'Asunto',
+      text: 'Hola',
+      requestId: 'test-request',
+    }),
+  );
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /email_delivery_not_configured/);
+  assert.equal(serializedLogs.includes('RESEND_API_KEY'), false);
+  assert.equal(serializedLogs.includes('re_'), false);
+
+  restoreEnv(snapshot);
+});
+
 test('sendEmail permite preview local fuera de produccion', async () => {
   const snapshot = { ...process.env };
 

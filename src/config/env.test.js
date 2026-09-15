@@ -68,7 +68,7 @@ test('validateRuntimeConfig falla si FRONTEND_URLS no usa https en produccion', 
   restoreEnv(snapshot);
 });
 
-test('validateRuntimeConfig falla en produccion si falta RESEND_API_KEY', () => {
+test('validateRuntimeConfig permite produccion sin RESEND_API_KEY', () => {
   const snapshot = { ...process.env };
 
   process.env.NODE_ENV = 'production';
@@ -83,10 +83,7 @@ test('validateRuntimeConfig falla en produccion si falta RESEND_API_KEY', () => 
 
   const { validateRuntimeConfig } = loadEnvModule();
 
-  assert.throws(
-    () => validateRuntimeConfig(),
-    /Debes configurar RESEND_API_KEY en produccion para recuperar passwords/,
-  );
+  assert.doesNotThrow(() => validateRuntimeConfig());
   restoreEnv(snapshot);
 });
 

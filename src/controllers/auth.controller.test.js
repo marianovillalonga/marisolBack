@@ -230,6 +230,38 @@ test('login exitoso setea cookie HttpOnly y no devuelve token en el body', async
   assert.equal(res.body.user.email, user.email);
 });
 
+test('login funciona aunque Resend no este configurado', async () => {
+  const user = {
+    id: 10,
+    email: 'admin@example.com',
+    role: 'admin',
+  };
+  const controller = loadAuthController({
+    userModel: {
+      validateCredentials: async () => ({ user }),
+    },
+    mailUtil: {
+      MailDeliveryError: class MailDeliveryError extends Error {},
+      sendPasswordResetEmail: async () => {
+        throw new Error('El login no deberia intentar enviar emails');
+      },
+    },
+  });
+  const req = {
+    body: {
+      email: 'admin@example.com',
+      password: 'secret',
+    },
+  };
+  const res = createMockResponse();
+
+  await controller.login(req, res, () => {});
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.authCookie, 'signed-token');
+  assert.equal(res.body.user.email, user.email);
+});
+
 test('requestPasswordReset no enumera usuarios inexistentes', async () => {
   const controller = loadAuthController();
   const req = {
@@ -246,6 +278,56 @@ test('requestPasswordReset no enumera usuarios inexistentes', async () => {
     res.body.message,
     'Si el email existe, enviaremos instrucciones para restablecer el acceso.',
   );
+});
+
+test('requestPasswordReset responde error controlado si Resend no esta configurado', async () => {
+  class MailDeliveryError extends Error {
+    constructor(code, message) {
+      super(message);
+      this.code = code;
+    }
+  }
+  const audits = [];
+  const controller = loadAuthController({
+    userModel: {
+      findByEmail: async () => ({
+        id: 9,
+        email: 'admin@example.com',
+        activo: true,
+      }),
+    },
+    auditUtil: {
+      registerAudit: async (_req, payload) => {
+        audits.push(payload);
+      },
+    },
+    mailUtil: {
+      MailDeliveryError,
+      sendPasswordResetEmail: async () => {
+        throw new MailDeliveryError(
+          'MAIL_DELIVERY_NOT_CONFIGURED',
+          'El envio de emails no esta disponible porque falta RESEND_API_KEY.',
+        );
+      },
+    },
+  });
+  const req = {
+    body: {
+      email: 'admin@example.com',
+    },
+    ip: '127.0.0.1',
+    requestId: 'test-request',
+  };
+  const res = createMockResponse();
+
+  await controller.requestPasswordReset(req, res, () => {});
+
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.ok, false);
+  assert.match(res.body.message, /envio de emails no esta disponible/i);
+  assert.equal(audits[0].action, 'password_reset_delivery_failed');
+  assert.equal(audits[0].details.code, 'MAIL_DELIVERY_NOT_CONFIGURED');
+  assert.equal(JSON.stringify(audits).includes('RESEND_API_KEY'), false);
 });
 
 test('validatePasswordResetToken rechaza token invalido o expirado', async () => {
