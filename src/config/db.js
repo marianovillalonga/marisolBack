@@ -69,7 +69,7 @@ function buildSslConfig() {
   const rejectUnauthorized = parseBoolean(explicitDbSslRejectUnauthorized);
 
   return {
-    rejectUnauthorized: rejectUnauthorized !== false,
+    rejectUnauthorized: rejectUnauthorized === true,
     ca: explicitDbCaCert || undefined,
   };
 }
