@@ -29,7 +29,7 @@ function isDatabaseConnectionError(error) {
 function notFoundHandler(req, res, _next) {
   res.status(404).json({
     ok: false,
-    message: `Ruta no encontrada: ${req.originalUrl}`,
+    message: `Ruta no encontrada: ${logger.sanitizeUrlForLogging(req.originalUrl)}`,
     requestId: req.requestId || null,
   });
 }
@@ -38,7 +38,7 @@ function errorHandler(error, req, res, _next) {
   logger.error('request_failed', {
     requestId: req.requestId || null,
     method: req.method,
-    path: req.originalUrl,
+    path: logger.sanitizeUrlForLogging(req.originalUrl),
     ip: req.ip,
     userId: req.user?.id || null,
     error: error instanceof Error ? error.message : String(error),

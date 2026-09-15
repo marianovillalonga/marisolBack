@@ -30,6 +30,54 @@ const SENSITIVE_KEYS = new Set([
   'reseturl',
   'resettoken',
 ]);
+const SENSITIVE_QUERY_KEYS = new Set([
+  'token',
+  'auth_token',
+  'authtoken',
+  'reset_token',
+  'resettoken',
+  'access_token',
+  'refresh_token',
+]);
+
+function sanitizeUrlPath(pathname) {
+  return String(pathname || '').replace(
+    /\/api\/auth\/(?:password-reset|reset-password)\/[^/?#]+/gi,
+    (match) => match.replace(/\/[^/]+$/, '/[REDACTED]'),
+  );
+}
+
+function sanitizeUrlForLogging(rawValue) {
+  if (typeof rawValue !== 'string') {
+    return rawValue || null;
+  }
+
+  const trimmed = rawValue.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const isAbsoluteUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed);
+    const parsedUrl = new URL(trimmed, 'http://local.invalid');
+
+    parsedUrl.pathname = sanitizeUrlPath(parsedUrl.pathname);
+    for (const key of Array.from(parsedUrl.searchParams.keys())) {
+      if (SENSITIVE_QUERY_KEYS.has(key.toLowerCase())) {
+        parsedUrl.searchParams.set(key, '[REDACTED]');
+      }
+    }
+
+    if (isAbsoluteUrl) {
+      return parsedUrl.toString();
+    }
+
+    return `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`;
+  } catch (_error) {
+    return trimmed.replace(/([?&](?:token|auth_token|reset_token)=)[^&#]*/gi, '$1[REDACTED]');
+  }
+}
 
 function ensureLogsDirectory() {
   fs.mkdirSync(logsDirectory, { recursive: true });
@@ -146,16 +194,14 @@ function buildRequestLogMeta(req, res, durationMs) {
   return {
     requestId: req.requestId || null,
     method: req.method,
-    path: req.originalUrl,
+    path: sanitizeUrlForLogging(req.originalUrl),
     statusCode: res.statusCode,
     durationMs,
     ip: req.ip,
     userId: req.user?.id || null,
-    authPresent: Boolean(
-      req.headers.cookie || req.headers.authorization || req.headers['x-auth-token'],
-    ),
+    authPresent: Boolean(req.headers.cookie),
     userAgent: req.headers['user-agent'] || null,
-    referer: req.headers.referer || null,
+    referer: sanitizeUrlForLogging(req.headers.referer || null),
   };
 }
 
@@ -183,6 +229,7 @@ module.exports = {
   debug,
   error,
   info,
+  sanitizeUrlForLogging,
   sanitizeMeta,
   warn,
 };

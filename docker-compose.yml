@@ -5,13 +5,13 @@ services:
     container_name: proyecto-marisol-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: proyecto_marisol
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-proyecto_marisol}
+      POSTGRES_USER: ${POSTGRES_USER:-marisol_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d proyecto_marisol"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 5s
       retries: 10

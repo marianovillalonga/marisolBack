@@ -203,7 +203,7 @@ test('login bloquea usuarios legacy que requieren reset de password', async () =
   assert.match(res.body.message, /restablecer la password/i);
 });
 
-test('login exitoso devuelve token para clientes sin cookie first-party', async () => {
+test('login exitoso setea cookie HttpOnly y no devuelve token en el body', async () => {
   const user = {
     id: 10,
     email: 'admin@example.com',
@@ -226,7 +226,7 @@ test('login exitoso devuelve token para clientes sin cookie first-party', async 
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.authCookie, 'signed-token');
-  assert.equal(res.body.token, 'signed-token');
+  assert.equal(res.body.token, undefined);
   assert.equal(res.body.user.email, user.email);
 });
 
@@ -251,6 +251,7 @@ test('requestPasswordReset no enumera usuarios inexistentes', async () => {
 test('validatePasswordResetToken rechaza token invalido o expirado', async () => {
   const controller = loadAuthController();
   const req = {
+    body: {},
     params: {
       token: 'invalid-token',
     },
@@ -261,6 +262,32 @@ test('validatePasswordResetToken rechaza token invalido o expirado', async () =>
 
   assert.equal(res.statusCode, 400);
   assert.equal(res.body.message, 'Token invalido o vencido');
+});
+
+test('validatePasswordResetToken acepta el token desde el body para evitar exponerlo en la URL', async () => {
+  const controller = loadAuthController({
+    passwordResetTokenModel: {
+      findValidTokenByHash: async (tokenHash) =>
+        tokenHash === 'hash:valid-token'
+          ? {
+              id: 4,
+              usuario_id: 9,
+            }
+          : null,
+    },
+  });
+  const req = {
+    body: {
+      token: 'valid-token',
+    },
+    params: {},
+  };
+  const res = createMockResponse();
+
+  await controller.validatePasswordResetToken(req, res, () => {});
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.ok, true);
 });
 
 test('resetPasswordWithToken rechaza token invalido o expirado', async () => {

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { buildRequestLogMeta, sanitizeMeta } = require('./logger.util');
+const { buildRequestLogMeta, sanitizeMeta, sanitizeUrlForLogging } = require('./logger.util');
 
 test('sanitizeMeta redacta credenciales y tokens en objetos anidados', () => {
   const result = sanitizeMeta({
@@ -69,7 +69,7 @@ test('buildRequestLogMeta incluye contexto operativo sin filtrar secretos', () =
   });
 });
 
-test('buildRequestLogMeta detecta auth por header sin cookie', () => {
+test('buildRequestLogMeta no trata headers legacy como sesion activa', () => {
   const meta = buildRequestLogMeta(
     {
       requestId: 'req-456',
@@ -87,5 +87,37 @@ test('buildRequestLogMeta detecta auth por header sin cookie', () => {
     12.3,
   );
 
-  assert.equal(meta.authPresent, true);
+  assert.equal(meta.authPresent, false);
+});
+
+test('sanitizeUrlForLogging redacta tokens de recuperacion en path y query string', () => {
+  assert.equal(
+    sanitizeUrlForLogging('/api/auth/password-reset/token-real-secreto'),
+    '/api/auth/password-reset/[REDACTED]',
+  );
+  assert.equal(
+    sanitizeUrlForLogging('https://app.example.com/reset-password?token=token-real-secreto'),
+    'https://app.example.com/reset-password?token=%5BREDACTED%5D',
+  );
+});
+
+test('buildRequestLogMeta redacta tokens en path y referer', () => {
+  const meta = buildRequestLogMeta(
+    {
+      requestId: 'req-reset',
+      method: 'GET',
+      originalUrl: '/api/auth/password-reset/token-real-secreto',
+      ip: '127.0.0.1',
+      headers: {
+        referer: 'https://app.example.com/reset-password?token=token-real-secreto',
+      },
+    },
+    {
+      statusCode: 404,
+    },
+    10,
+  );
+
+  assert.equal(meta.path, '/api/auth/password-reset/[REDACTED]');
+  assert.equal(meta.referer, 'https://app.example.com/reset-password?token=%5BREDACTED%5D');
 });

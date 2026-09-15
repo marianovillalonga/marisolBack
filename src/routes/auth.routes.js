@@ -12,8 +12,7 @@ const router = Router();
 
 router.post('/login', loginRateLimit, authController.login);
 router.post('/forgot-password', passwordResetRequestRateLimit, authController.requestPasswordReset);
-router.get('/password-reset/:token', passwordResetAttemptRateLimit, authController.validatePasswordResetToken);
-router.get('/reset-password/:token', passwordResetAttemptRateLimit, authController.validatePasswordResetToken);
+router.post('/password-reset/validate', passwordResetAttemptRateLimit, authController.validatePasswordResetToken);
 router.post('/password-reset', passwordResetAttemptRateLimit, authController.resetPasswordWithToken);
 router.post('/reset-password', passwordResetAttemptRateLimit, authController.resetPasswordWithToken);
 router.post('/logout', authMiddleware, authController.logout);

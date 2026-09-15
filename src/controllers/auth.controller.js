@@ -80,7 +80,7 @@ async function login(req, res, next) {
       },
     });
 
-    return res.status(200).json(buildLoginSuccessResponse(user, token));
+    return res.status(200).json(buildLoginSuccessResponse(user));
   } catch (error) {
     next(error);
   }
@@ -209,7 +209,7 @@ async function requestPasswordReset(req, res, next) {
 
 async function validatePasswordResetToken(req, res, next) {
   try {
-    const token = String(req.params?.token || '').trim();
+    const token = String(req.body?.token || req.params?.token || '').trim();
 
     if (!token) {
       return res.status(400).json(buildMessageResponse('Token invalido o vencido'));
